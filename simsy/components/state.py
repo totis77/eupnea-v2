@@ -11,7 +11,7 @@ capability components (`Affordance`, `SlotSet`) live with the smart object.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 class Blackboard(dict):
@@ -74,3 +74,20 @@ class Role:
     systems/queries use to tell staff from patrons."""
 
     name: str
+
+
+@dataclass
+class Inventory:
+    """What an agent is carrying. Multi-step plans move items between objects —
+    e.g. a coffee acquired at the counter and consumed at a seat."""
+
+    items: set[str] = field(default_factory=set)
+
+    def add(self, item: str) -> None:
+        self.items.add(item)
+
+    def remove(self, item: str) -> None:
+        self.items.discard(item)
+
+    def has(self, item: str) -> bool:
+        return item in self.items

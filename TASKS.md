@@ -142,7 +142,17 @@ scenes expressed as Python `build()` for now (data-driven deferred to Phase 3).
       orders pile up unserved. 30/30 green; headless run shows the full
       queue→order→brew→pickup→leave loop; determinism holds. Coffee-shop espresso
       left self-serve for now (optional follow-up to staff it).
-- [ ] 2D **Multi-step interaction plans** (queue → order → wait → receive).
+- [x] 2D **Multi-step interaction plans.** Scripted recipes: `agent.recipes[need]`
+      = ordered `Step`s ([ai/plan.py](simsy/ai/plan.py)); `build_plan_tree`
+      compiles a recipe into a BT, resolving each step's object by `tag`
+      (`registry.by_tag`). New `Inventory` component carries an item between
+      steps; new BT leaves `SetTarget`/`ReceiveItem`/`ConsumeItem`; controller
+      adopts a plan when the need has a recipe and anchors hysteresis to the
+      motive source (not the per-step target). Demonstrator
+      `projects/micro/plan/`: order coffee at the counter (carry it) → sit & drink
+      it at a seat (Caffeine satisfied only on consume). Surfaced + fixed the §2B
+      gap: a rising drive interrupted drinking mid-sip → added an `ATOMIC` guard
+      so `Occupy`/`Consume` can't be interrupted. 35/35 green; determinism holds.
 - [ ] 2E **Groups** (`GroupMember`): arrive and move together.
 - [ ] 2F **Portals / multi-venue** (`Portal`): multiple venues, cross-venue nav.
 - [ ] 2G *(stretch)* mood/affect modulating utility.
@@ -182,4 +192,19 @@ scenes expressed as Python `build()` for now (data-driven deferred to Phase 3).
   slot is pluggable (barista runs idle→brewing, ticked like patrons); world-side
   `ServicePoint` order ledger + `Role`; guest flow Reserve→Travel→Order→Receive.
   `projects/micro/service/` isolates it (toggle `with_barista`). 30/30 green;
-  full order→brew→pickup→leave loop verified headless. Next: 2D multi-step plans.
+  full order→brew→pickup→leave loop verified headless.
+- 2D (multi-step plans) done — scripted recipes compiled to BTs (`ai/plan.py`),
+  `Inventory` carries items between objects, tags + `by_tag` locate step targets;
+  `projects/micro/plan/` = order coffee → sit & drink. Fixed §2B mid-interaction
+  interruption with an `ATOMIC` guard. 35/35 green.
+- Viewer: side panel now renders each agent's live plan tree (steps→active leaf)
+  + carried items, data-driven from a new `plan_view` in the snapshot. Server
+  takes a project arg (`python -m simsy.server <project>`); launch configs added.
+- **`projects/cafe/`** (whiteboard scenario) assembled from 2A–2D: entry/exit,
+  staffed counter (queue + ServicePoint, slots=3) with 2 FSM baristas, varied
+  seating (couch/tables/coworking) drunk via the coffee recipe, a toilet (new
+  Bladder need), continuous spawner. Plan step-resolution now picks the nearest
+  *available* object (so guests spread across seats); fixed a ServicePoint orphan-
+  ready leak (drinks for guests who left are discarded). ~80% of guests served;
+  37/37 green; live via `simsy-cafe-viewer`. Deferred per roadmap: groups (2E),
+  other venues/portals (2F), literal cashier↔pickup-bar split.

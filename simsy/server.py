@@ -19,6 +19,8 @@ import asyncio
 import functools
 import http.server
 import json
+import os
+import sys
 import threading
 from pathlib import Path
 
@@ -27,7 +29,9 @@ import websockets
 from .config import load_config
 from .project import build_project
 
-PROJECT = "coffee_shop"
+# Which project to stream. Pick via CLI arg or SIMSY_PROJECT; defaults to the
+# coffee shop. e.g. `uv run python -m simsy.server micro.plan`
+PROJECT = (sys.argv[1] if len(sys.argv) > 1 else os.environ.get("SIMSY_PROJECT")) or "coffee_shop"
 _cfg = load_config()
 HTTP_PORT = _cfg.server.http_port
 WS_PORT = _cfg.server.ws_port

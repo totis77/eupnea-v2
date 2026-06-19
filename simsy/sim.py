@@ -86,6 +86,8 @@ class Simulation:
             "score": round(motive_score, 3),
             "needs": {k: round(v, 2) for k, v in sorted(a.drives.needs.items())},
             "path": [(round(x, 2), round(y, 2)) for x, y in (a.locomotor.path or [])],
+            "carrying": sorted(a.inventory.items),
+            "plan": a.plan_view,
         }
 
     def snapshot(self) -> dict:

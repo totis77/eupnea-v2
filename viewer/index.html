@@ -29,10 +29,17 @@
     margin-bottom: 10px; background: #0f141b; }
   .agent-card .name { font-weight: 600; display: flex; justify-content: space-between; }
   .agent-card .motive { font-size: 11px; color: var(--muted); margin: 2px 0 8px; }
-  .tree { display: flex; gap: 4px; margin-bottom: 8px; }
-  .tree .node { flex: 1; text-align: center; font-size: 10px; padding: 3px 0;
-    border: 1px solid var(--line); border-radius: 4px; color: var(--muted); }
+  .tree { display: flex; gap: 4px; margin-bottom: 4px; }
+  .tree.sub { margin-left: 10px; opacity: .92; }
+  .tree.sub::before { content: "↳"; color: var(--muted); font-size: 10px; align-self: center; margin-right: 2px; }
+  .tree .node { flex: 1; text-align: center; font-size: 10px; padding: 3px 2px;
+    border: 1px solid var(--line); border-radius: 4px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tree .node.active { background: rgba(63,185,80,.18); border-color: var(--ok); color: var(--ok); }
+  .tree .node.done { color: var(--muted); border-color: var(--line); opacity: .5; }
+  .tree .node.pending { color: var(--muted); opacity: .65; }
+  .carry { font-size: 10px; color: var(--muted); margin: 0 0 8px; }
+  .carry .item { color: #d2a8ff; border: 1px solid rgba(210,168,255,.4);
+    border-radius: 8px; padding: 0 6px; margin-left: 4px; }
   .bar { display: flex; align-items: center; gap: 6px; margin: 3px 0; font-size: 11px; }
   .bar .label { width: 58px; color: var(--muted); }
   .bar .track { flex: 1; height: 7px; background: #20262e; border-radius: 4px; overflow: hidden; }
@@ -54,7 +61,6 @@
 </div>
 <script>
 const WS_URL = "ws://localhost:8765";
-const TREE = ["Reserve", "Travel", "Occupy", "Release"];
 const NEED_COLOR = { Caffeine: getC("--caffeine"), Rest: getC("--rest") };
 function getC(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
 function motiveColor(m){ return NEED_COLOR[m] || getC("--idle"); }
@@ -248,11 +254,27 @@ function drawStatusUI(h){
 }
 
 // ---- side panel: live behavior trees ------------------------------------
+// Render the agent's plan tree: each level is a row of step/leaf chips, and we
+// recurse into the active child so a multi-step plan shows its steps AND the
+// active step's leaves. Children before the active one are "done", after "pending".
+function renderTree(node, sub){
+  if (!node || !node.children) return "";
+  const ai = node.active_index ?? 0;
+  const row = node.children.map((c, i) => {
+    const cls = i < ai ? "done" : (i === ai ? "active" : "pending");
+    return `<div class="node ${cls}">${c.name}</div>`;
+  }).join("");
+  return `<div class="tree${sub ? " sub" : ""}">${row}</div>` +
+    renderTree(node.children[ai], true);  // descend into the running child
+}
+
 function updateCards(){
   const root = document.getElementById("cards");
   root.innerHTML = cur.agents.map(a => {
-    const tree = TREE.map(n =>
-      `<div class="node ${n === a.node ? "active" : ""}">${n}</div>`).join("");
+    const tree = renderTree(a.plan, false) || `<div class="tree"><div class="node">idle</div></div>`;
+    const carry = (a.carrying && a.carrying.length)
+      ? `<div class="carry">carrying${a.carrying.map(i => `<span class="item">${i}</span>`).join("")}</div>`
+      : "";
     const needs = Object.entries(a.needs).map(([k, v]) =>
       `<div class="bar"><span class="label">${k}</span>
         <span class="track"><span class="fill" style="width:${v}%;background:${NEED_COLOR[k] || '#58a6ff'}"></span></span>
@@ -261,7 +283,7 @@ function updateCards(){
       <div class="name"><span><span class="dot" style="background:${motiveColor(a.motive)}"></span> ${a.id}</span>
         <span style="color:var(--muted)">${a.motive ? a.score.toFixed(2) : ""}</span></div>
       <div class="motive">${a.motive ? `${a.motive} → ${a.target || "?"}` : "idle"}</div>
-      <div class="tree">${tree}</div>${needs}</div>`;
+      ${tree}${carry}${needs}</div>`;
   }).join("");
 }
 

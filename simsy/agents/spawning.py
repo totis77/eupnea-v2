@@ -33,6 +33,7 @@ class AgentArchetype:
     think_period_ticks: int = 5
     spread: float = 12.0  # +/- jitter applied to non-"Leave" initial needs
     utility_cfg: UtilityCfg | None = None
+    recipes: dict | None = None  # multi-step recipes per need (e.g. how to get Caffeine)
 
     def spawn(self, agent_id: str, pos: tuple[float, float], rng: "random.Random") -> Agent:
         needs = {}
@@ -45,6 +46,7 @@ class AgentArchetype:
             think_period_ticks=self.think_period_ticks,
             radius=self.radius,
             utility_cfg=self.utility_cfg,
+            recipes=self.recipes,
         )
 
 
