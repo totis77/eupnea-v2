@@ -92,8 +92,8 @@ class Travel(Node):
         obj = _target(agent)
         if obj is None:
             return Status.FAILURE
-        agent.set_goal(obj.position)
-        return Status.SUCCESS if agent.at_goal else Status.RUNNING
+        agent.locomotor.set_goal(obj.position)
+        return Status.SUCCESS if agent.locomotor.at_goal else Status.RUNNING
 
 
 class Occupy(Node):
@@ -115,7 +115,8 @@ class Occupy(Node):
             bb["occupy_per_tick"] = obj.advertised_amount(need) / obj.interaction_ticks
         bb["occupy_ticks_left"] -= 1
         need = bb["occupy_need"]
-        agent.needs[need] = max(0.0, agent.needs[need] - bb["occupy_per_tick"])
+        needs = agent.drives.needs
+        needs[need] = max(0.0, needs[need] - bb["occupy_per_tick"])
         if bb["occupy_ticks_left"] <= 0:
             for key in ("occupy_ticks_left", "occupy_need", "occupy_per_tick"):
                 bb.pop(key, None)

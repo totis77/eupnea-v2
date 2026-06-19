@@ -139,12 +139,15 @@ The Web Client renders debug overlays directly from the engine's serialized stat
 
 ## 6. Entity-Component Model (the authoring & runtime substrate)
 
-> **Status: target model (Phase 0, agreed).** Today the engine uses bespoke
-> `SmartObject` and `Agent` classes. The model below is what they are being
-> refactored *into* — the substrate the GUI/DSL will author and the thing that
-> makes features composable and independently testable. Phase 1 is a
-> **parity refactor** (re-express current behaviour with zero new features; all
-> existing tests still pass) before any new capability is added.
+> **Status: implemented (Phase 1 complete).** `Agent` and `SmartObject` are now
+> entities composed from the components below — Representation (`Transform`/
+> `NavShape`/`RenderShape`), Capability/State (`Drives`, `Locomotor`,
+> `Blackboard`; world-side `Affordance`, `SlotSet`), and a pluggable `Controller`
+> (`Utility→BT`). The refactor was done at **parity** (zero new features; the
+> determinism test still proves bit-identical replay), and components are now
+> independently testable ([tests/test_components.py](../tests/test_components.py)).
+> Still deferred to later phases: walls as `NavShape(static)` entities and
+> systems querying entities by component type (scene-as-data), then GUI authoring.
 
 ### A. The Entity
 Following the Unity/Unreal/Godot convention, everything in the world — props,

@@ -27,14 +27,19 @@ simsy/
   core/
     context.py         # SimContext: seeded RNG + fixed dt + tick  ← determinism choke point
     events.py          # queued EventBus (drained in insertion order)
+  components/          # entity components (§6D), grouped by tier
+    representation.py  # Transform (pose) + NavShape (engine collision proxy) + RenderShape (viewer-only)
+    state.py           # Capability/State tier: Drives, Locomotor, Blackboard (agent-side)
   world/
-    smart_object.py    # affordances + Reserve→Travel→Occupy→Release lifecycle; `despawns` exits
+    entity.py          # Entity: id + Transform/NavShape/RenderShape + typed component bag (§6A)
+    smart_object.py    # entity holding Affordance + SlotSet (Reserve→Occupy→Release); `despawns` exits
     registry.py        # object lookup (global tier; local hash-grid tier still a TODO)
   ai/
     utility.py         # object-advertised scorer; pressure curve, hysteresis, idle threshold
     behavior_tree.py   # Status/Sequence + Reserve/Travel/Occupy/Release leaves, OnAbort
+    controller.py      # the pluggable brain (§6E): Utility(select) → BT(execute) glue
   agents/
-    agent.py           # drives, blackboard, Utility↔BT glue; cognition vs locomotion split
+    agent.py           # entity composing Drives+Locomotor+Blackboard+Controller; cognition vs locomotion split
     spawning.py        # AgentArchetype (flyweight) + Spawner (seed-driven arrivals)
   nav/
     grid.py            # NavGrid: walkable grid, obstacle inflation, line-of-sight
@@ -89,6 +94,18 @@ as `simsy-viewer`.
 | [test_orca.py](tests/test_orca.py) | head-on avoidance without interpenetration; ORCA determinism |
 | [test_scheduling.py](tests/test_scheduling.py) | population cap, spawn+despawn, deterministic timeline |
 | [test_config.py](tests/test_config.py) | defaults when absent, partial override, unknown-key tolerance |
+| [test_components.py](tests/test_components.py) | components driven in isolation: SlotSet lifecycle, Drives growth/clamp, Locomotor goal/clear |
+
+## Entity-component model (§6)
+
+`Agent` and `SmartObject` are **entities composed from components**
+([world/entity.py](simsy/world/entity.py)), in three tiers: Representation
+(`Transform`/`NavShape`/`RenderShape`), Capability/State (`Drives`, `Locomotor`,
+`Blackboard`; world-side `Affordance`, `SlotSet`), and a pluggable Controller
+(`Utility→BT`, [ai/controller.py](simsy/ai/controller.py)). The engine reads
+`Transform`+`NavShape`+components and **never `RenderShape`** (§6B headless
+boundary). `Agent`/`SmartObject` expose `id`/`position`/`radius` (and the object
+lifecycle) as thin accessors onto their components — see architecture doc §6.
 
 ## Known stubs / not-yet-done
 
@@ -98,6 +115,8 @@ as `simsy-viewer`.
 - `registry.py` is the global lookup tier only; the local Uniform Hash Grid is a TODO.
 - Snapshots are full keyframes (delta encoding deferred); the GUI/DSL authoring
   layer does not exist yet.
+- Walls are still raw grid obstacles, not `NavShape(static)` entities; Nav build
+  doesn't yet query entities (deferred to the scene-as-data phase).
 
 When adding a tunable constant, add it to [config.py](simsy/config.py) (with a
 default) and surface it in [config.yaml](config.yaml) rather than hardcoding it.

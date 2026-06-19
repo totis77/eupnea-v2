@@ -52,6 +52,56 @@ isn't a fixed three and ORCA faces a real crowd.
 
 ---
 
+## Phase 1 — Parity refactor to the Entity-Component model  [~]
+**Goal:** re-express today's `SmartObject`/`Agent` as `Entity = Transform +
+RenderShape + NavShape + [components]` in three tiers (architecture doc §6),
+with **zero new features**. All 14 existing tests must stay green after every
+slice — they are the parity pins. Each slice is independently committable.
+
+Decisions:
+- **Where things live:** `simsy/components/` (new) holds the Capability/State +
+  Representation component dataclasses; the brain stays in `simsy/ai/` as
+  `controller.py` (it wraps `utility.py` + `behavior_tree.py`). `Entity` base in
+  `simsy/world/entity.py`.
+- **Parity, not redesign:** keep public surfaces (`Agent.position`,
+  `agent.needs`, `agent.active_motive/active_node`, `agent.set_goal`,
+  `SmartObject.reserve/occupy/release/free_slots`, `sim.snapshot()`) working via
+  delegation so the engine/systems/tests are untouched until the very end.
+
+- [x] P1.1 **Controller component (keystone).** Extracted the think/adopt/abort/
+      clear/score glue from `Agent` into `simsy/ai/controller.py::Controller`
+      (Utility=select → BT=execute, §6E). `Agent` holds `self.controller` and
+      delegates `think()/act()`; `active_motive/active_node` are now properties
+      reading the controller. 14/14 tests green — replay bit-identical.
+- [x] P1.2 **Agent Capability/State tier.** New `simsy/components/` package:
+      `Drives` (needs+growth+update), `Locomotor` (speed/goal/path/vel/at_goal +
+      set/clear goal), `Blackboard` (dict subclass). `Agent` now holds these;
+      retargeted every reader (controller, BT leaves, utility, locomotion, sim)
+      and the orca test — no shims left. `radius`/`position` stay inline (they're
+      Representation-tier, P1.3). 14/14 green; replay bit-identical.
+- [x] P1.3 **Entity + Representation tier.** New `components/representation.py`
+      (`Transform` pos+facing, `NavShape` radius+static, `RenderShape` viewer-only)
+      and `world/entity.py` (`Entity`: id + 3 representation slots + a typed
+      component bag via `add/get/has`). `Agent` and `SmartObject` now *compose* an
+      `Entity` (not subclass); `id`/`position`/`radius` are thin pose accessors
+      onto it — so locomotion/sim/BT/tests needed no call-site changes. Agents are
+      dynamic NavShapes (ORCA), objects static. 14/14 green; headless run identical.
+- [x] P1.4 **SmartObject → entity with data components.** New `SlotSet`
+      component (slot count + `_reserved`/`_occupants` + reserve/occupy/release)
+      registered on the object's entity; `Affordance` stays the advertised-need
+      component. `SmartObject` keeps its full method surface delegating one line
+      each (per chosen API) — so utility, BT leaves, and `test_reservation_lifecycle`
+      are untouched. World-side mirror of the agent split. 14/14 green.
+- [—] P1.5 **Systems read by component type** — *folded/deferred.* The kept
+      `SmartObject` facade + sanctioned pose accessors made "remove facades"
+      moot, and the only remaining §6F item (Nav build querying `NavShape(static)`)
+      needs walls-as-entities, which is a feature (scene-as-data), not parity.
+- [x] P1.6 **Close-out.** Added `tests/test_components.py` (SlotSet/Drives/
+      Locomotor in isolation); updated CLAUDE.md layout + new EC-model section +
+      test table, and architecture.md §6 status → "implemented (Phase 1 complete)".
+      20/20 green; viewer re-verified (no console errors); committed on branch
+      `phase-1-entity-components` (3690526).
+
 ## Status log
 - _(start)_ — plan created; beginning Task 1.
 - Task 1 done — `NavGrid(inflate=)`; doorway widened to y∈[4,8]; agents cross at
@@ -61,3 +111,17 @@ isn't a fixed three and ORCA faces a real crowd.
 - Task 3 done — `AgentArchetype` + `Spawner`; Leave-drive/Exit departures; dynamic
   capped population, deterministic timeline.
 - **All 12 tests green. All three tasks verified in the live viewer.**
+- Phase 1 started — P1.1 (Controller component) done: brain extracted from
+  `Agent` into `ai/controller.py`; 14/14 tests still bit-identical.
+- P1.2 (agent Capability/State tier) done — `Drives`/`Locomotor`/`Blackboard` in
+  new `simsy/components/`; all readers retargeted (no shims); 14/14 green.
+- P1.3 (Entity + Representation tier) done — `Transform`/`NavShape`/`RenderShape`
+  + `Entity` substrate; `Agent`/`SmartObject` compose an entity, pose via thin
+  accessors; 14/14 green, headless run identical.
+- P1.4 (SmartObject data components) done — `SlotSet` component owns the
+  reservation lifecycle; `SmartObject` delegates; 14/14 green.
+- **Phase 1 complete.** P1.5 folded (its intent was moot / Phase-2 scope); P1.6
+  closed out: isolation tests added (20/20 green), docs updated, viewer verified,
+  committed on branch `phase-1-entity-components` (3690526). `Agent`/`SmartObject`
+  are now entities composed from Representation + Capability/State + Controller
+  components — the §6 substrate the future scene-as-data/GUI layers will author.
