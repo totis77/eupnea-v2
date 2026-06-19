@@ -25,8 +25,9 @@ from pathlib import Path
 import websockets
 
 from .config import load_config
-from .sim import build_coffee_shop
+from .project import build_project
 
+PROJECT = "coffee_shop"
 _cfg = load_config()
 HTTP_PORT = _cfg.server.http_port
 WS_PORT = _cfg.server.ws_port
@@ -44,7 +45,7 @@ async def _ws_handler(ws) -> None:
 
 
 async def _sim_loop() -> None:
-    sim = build_coffee_shop(config=_cfg)
+    sim = build_project(PROJECT, config=_cfg)
     dt = sim.ctx.dt
     # Decouple broadcast rate from the tick rate (architecture doc 2A): emit a
     # snapshot every Nth tick so a 100Hz sim can still stream at, say, 10Hz.

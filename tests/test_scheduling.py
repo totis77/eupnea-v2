@@ -1,10 +1,10 @@
 """Spawn/despawn scheduling: capped, dynamic, and deterministic."""
 
-from simsy.sim import build_coffee_shop
+from simsy.project import build_project
 
 
 def test_population_never_exceeds_cap():
-    sim = build_coffee_shop(max_population=6)
+    sim = build_project("coffee_shop", max_population=6)
     peak = 0
     for _ in range(800):
         sim.step()
@@ -14,7 +14,7 @@ def test_population_never_exceeds_cap():
 
 
 def test_agents_both_spawn_and_despawn():
-    sim = build_coffee_shop()
+    sim = build_project("coffee_shop")
     ever_seen, despawned = set(), 0
     for _ in range(900):
         before = {a.id for a in sim.agents}
@@ -28,7 +28,7 @@ def test_agents_both_spawn_and_despawn():
 
 def test_population_timeline_is_deterministic():
     def ids_over_time(seed):
-        sim = build_coffee_shop(seed=seed)
+        sim = build_project("coffee_shop", seed=seed)
         trace = []
         for _ in range(400):
             sim.step()

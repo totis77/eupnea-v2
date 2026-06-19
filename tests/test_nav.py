@@ -2,7 +2,7 @@
 
 from simsy.nav.astar import find_path
 from simsy.nav.grid import NavGrid
-from simsy.sim import build_coffee_shop
+from simsy.project import build_project
 
 
 def _walled() -> NavGrid:
@@ -33,7 +33,7 @@ def test_find_path_is_deterministic():
 
 
 def test_agents_never_end_a_tick_inside_a_wall():
-    sim = build_coffee_shop()
+    sim = build_project("coffee_shop")
     for _ in range(150):
         sim.step()
         for a in sim.agents:

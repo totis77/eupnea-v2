@@ -1,11 +1,11 @@
 """The architecture's central promise: same seed -> identical replay."""
 
-from simsy.sim import build_coffee_shop
+from simsy.project import build_project
 from simsy.world.smart_object import Affordance, SmartObject
 
 
 def _trace(seed: int, ticks: int) -> list[dict]:
-    sim = build_coffee_shop(seed=seed)
+    sim = build_project("coffee_shop", seed=seed)
     trace = []
     for _ in range(ticks):
         sim.step()

@@ -70,13 +70,35 @@ def _target(agent: "Agent"):
 
 
 class Reserve(Node):
+    """Claim a slot. For an uncontended object this is immediate (SUCCESS/FAILURE).
+    For a queue-enabled object that is full, the agent joins the line and returns
+    RUNNING — standing in its assigned spot — until it reaches the head and a slot
+    frees, then reserves and succeeds (architecture doc §6D queue lifecycle)."""
+
     name = "Reserve"
 
     def tick(self, agent: "Agent", ctx: "SimContext") -> Status:
         obj = _target(agent)
         if obj is None:
             return Status.FAILURE
-        return Status.SUCCESS if obj.reserve(agent.id) else Status.FAILURE
+        if obj.is_reserved_by(agent.id):
+            return Status.SUCCESS  # already holding a slot
+        q = obj.queue
+        if q is None:
+            return Status.SUCCESS if obj.reserve(agent.id) else Status.FAILURE
+        # Queue-enabled: take a place in line and advance only from the head.
+        q.join(agent.id)
+        if q.head() == agent.id and obj.free_slots > 0:
+            obj.reserve(agent.id)
+            q.leave(agent.id)
+            return Status.SUCCESS
+        agent.locomotor.set_goal(q.wait_slot(agent.id))  # stand in (and shuffle up) the line
+        return Status.RUNNING
+
+    def abort(self, agent: "Agent", ctx: "SimContext") -> None:
+        obj = _target(agent)
+        if obj is not None and obj.queue is not None:
+            obj.queue.leave(agent.id)  # drop out of line (reservation freed by the controller)
 
 
 class Travel(Node):

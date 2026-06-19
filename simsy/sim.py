@@ -1,19 +1,24 @@
-"""Simulation driver + a runnable coffee-shop vertical slice.
+"""Simulation driver: the fixed-timestep tick loop and snapshot emitter.
 
-Run headless:  uv run python -m simsy.sim
+This is engine-only — scene *content* lives in a project (see `simsy.project`
+and `projects/`). Run a project headless with `uv run python -m simsy.run`.
 """
 
 from __future__ import annotations
 
-from .agents.agent import Agent
-from .agents.spawning import AgentArchetype, Spawner
+from typing import TYPE_CHECKING
+
 from .ai import utility
-from .config import Config, load_config
-from .core.context import SimContext
-from .nav.grid import NavGrid
+from .config import load_config
 from .nav.locomotion import Locomotion
-from .world.registry import WorldRegistry
-from .world.smart_object import Affordance, SmartObject
+
+if TYPE_CHECKING:
+    from .agents.agent import Agent
+    from .agents.spawning import Spawner
+    from .config import Config
+    from .core.context import SimContext
+    from .nav.grid import NavGrid
+    from .world.registry import WorldRegistry
 
 
 class Simulation:
@@ -105,93 +110,3 @@ class Simulation:
             ],
             "obstacles": list(self.grid.obstacles),
         }
-
-
-def build_coffee_shop(
-    config: Config | None = None,
-    seed: int | None = None,
-    max_population: int | None = None,
-) -> Simulation:
-    """Build the coffee-shop scene. Subsystem knobs come from `config`
-    (config.yaml or defaults); the scene *structure* stays in code (that is
-    the DSL's job). Explicit `seed`/`max_population` args override config."""
-    cfg = config or load_config()
-    seed = cfg.simulation.seed if seed is None else seed
-    max_pop = cfg.population.max if max_population is None else max_population
-    ctx = SimContext(seed=seed, dt=cfg.simulation.dt)
-
-    world = WorldRegistry()
-    world.add(
-        SmartObject(
-            "espresso", "CoffeeCounter", (20.0, 0.0),
-            [Affordance("Caffeine", 40.0)], slots=1, interaction_ticks=20,
-        )
-    )
-    world.add(
-        SmartObject(
-            "couch", "Chair", (-20.0, 0.0),
-            [Affordance("Rest", 30.0)], slots=2, interaction_ticks=15,
-        )
-    )
-    # The exit: reaching it satisfies "Leave" and despawns the agent. Plenty of
-    # slots so departure never blocks. Lives at the entrance.
-    entrance = (-24.0, 0.0)
-    world.add(
-        SmartObject(
-            "door", "Exit", entrance,
-            [Affordance("Leave", 100.0)], slots=12, interaction_ticks=1,
-            despawns=True,
-        )
-    )
-
-    # A dividing wall at x=0 with a doorway gap at y in [4, 8]. Caffeine seekers
-    # on the left must detour up to the doorway to reach the espresso -- this is
-    # what exercises A* (global path) and ORCA (queueing at the doorway).
-    # The grid is inflated by the agent radius so bodies never clip the wall.
-    grid = NavGrid(*cfg.world.bounds, cell=cfg.world.cell_size, inflate=cfg.agent.radius)
-    grid.add_obstacle(-0.6, -13.0, 0.6, 4.0)
-    grid.add_obstacle(-0.6, 8.0, 0.6, 13.0)
-
-    # Guests arrive at the door, satisfy Caffeine/Rest, then "Leave" grows until
-    # it dominates and they head back to the exit.
-    archetype = AgentArchetype(
-        name="guest",
-        needs=dict(cfg.archetype.needs),
-        growth=dict(cfg.archetype.growth),
-        speed=cfg.agent.speed,
-        radius=cfg.agent.radius,
-        think_period_ticks=cfg.agent.think_period_ticks,
-        spread=cfg.population.need_spread,
-        utility_cfg=cfg.utility,
-    )
-    spawner = Spawner(
-        archetype, entrance, max_pop,
-        interval_ticks=tuple(cfg.population.spawn_interval_ticks),
-    )
-    sim = Simulation(ctx, world, [], grid, spawner, config=cfg)
-    spawner.prefill(sim.agents, ctx, cfg.population.initial)  # population at tick 0
-    return sim
-
-
-def main() -> None:
-    sim = build_coffee_shop()
-    print(f"coffee-shop slice | seed={sim.ctx.seed} dt={sim.ctx.dt}s\n")
-    for _ in range(120):
-        sim.step()
-        if sim.ctx.tick % 20 == 0:
-            snap = sim.snapshot()
-            print(f"t={snap['time']:>5}s tick={snap['tick']:>3}")
-            for a in snap["agents"]:
-                motive = a["motive"] or "-"
-                node = a["node"] or "-"
-                needs = " ".join(f"{k}={v:>5.1f}" for k, v in a["needs"].items())
-                print(
-                    f"  {a['id']:<6} {needs}  motive={motive:<8} "
-                    f"node={node:<10} @({a['pos'][0]:>6.1f},{a['pos'][1]:>5.1f})"
-                )
-            occ = " ".join(f"{o['id']}={o['free']}/{o['slots']}" for o in snap["objects"])
-            print(f"  slots: {occ}\n")
-
-
-if __name__ == "__main__":
-    main()

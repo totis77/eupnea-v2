@@ -20,9 +20,11 @@ Pipeline: `Utility → Behavior Tree → Smart Object lifecycle`, with a world-l
 ```
 docs/architecture.md   # design source of truth (read first)
 config.yaml            # tunable subsystem knobs (NOT scene content)
-simsy/
+simsy/                 # THE ENGINE — reusable AI mechanics; no scene content
   config.py            # typed config + load_config(); defaults live here
-  sim.py               # Simulation driver + build_coffee_shop() scene + `python -m simsy.sim`
+  sim.py               # Simulation driver (tick loop + snapshot emitter)
+  project.py           # project loader: build_project(name) → Simulation (engine↔project seam)
+  run.py               # generic headless runner: `python -m simsy.run [project] [ticks]`
   server.py            # WebSocket + HTTP bridge for the viewer (`python -m simsy.server`)
   core/
     context.py         # SimContext: seeded RNG + fixed dt + tick  ← determinism choke point
@@ -47,6 +49,12 @@ simsy/
     orca.py            # ORCA (RVO2 linear-program port): Vec2, Line, orca_velocity
     locomotion.py      # world-level movement: path following + ORCA + collision resolution
 viewer/index.html      # canvas client: interpolated render + debug overlays (trees, tethers, slots)
+projects/              # PROJECTS — self-contained scenarios; own their assets+scene, reference simsy
+  coffee_shop/
+    project.py         # build(config, seed, max_population) → Simulation: scene placement + walls + spawner
+    assets.py          # resources: object kinds (espresso/couch/exit) + guest archetype
+  micro/               # tiny single-feature projects for isolation testing
+    queue/             # one contended counter + a line (the Queue feature)
 tests/                 # pytest suite (see below)
 ```
 
@@ -67,19 +75,30 @@ tests/                 # pytest suite (see below)
   polls arrival; actual movement lives in [nav/locomotion.py](simsy/nav/locomotion.py).
 - **Reservation lifecycle:** reserve a slot *before* pathfinding; always release on
   abort/despawn (`OnAbort` in the BT). See [world/smart_object.py](simsy/world/smart_object.py).
+  Contended objects can opt into a `Queue` (`enable_queue`): when full, the
+  `Reserve` leaf joins the line (RUNNING) and advances the head into a freed slot.
+  A full object stays a Utility candidate **only if it has a queue**.
+- **Engine vs project boundary:** `simsy/` is reusable *mechanics* (components,
+  systems, controllers, the `Simulation` driver). A **project** under
+  [projects/](projects/) is a self-contained scenario that owns its *content*
+  (assets + scene placement) and references the engine — see
+  [projects/coffee_shop/project.py](projects/coffee_shop/project.py). Load one via
+  `simsy.project.build_project(name)`. (Phase 3 turns a project's `build()` into
+  serialized scene *data*; Phase 4 a GUI that edits it.)
 - **Config vs scene boundary:** [config.yaml](config.yaml) holds subsystem *tuning*
   (ORCA, utility, population, ports…). Scene *content* (which objects/walls exist)
-  stays in `build_coffee_shop()` — that is the future DSL's responsibility, not config.
+  lives in a project's `project.py`/`assets.py`, not config.
 
 ## Commands
 
 This project is **uv-managed** — always use `uv`, never bare `python`/`pip`.
 
 ```bash
-uv run pytest -q                 # run the test suite
-uv run python -m simsy.sim       # headless: print per-tick state
-uv run python -m simsy.server    # serve viewer at http://localhost:8000
-uv add <pkg>                     # add a dependency
+uv run pytest -q                      # run the test suite
+uv run python -m simsy.run            # headless: step a project, print per-tick state
+uv run python -m simsy.run coffee_shop 200   # …a named project for N ticks
+uv run python -m simsy.server         # serve viewer at http://localhost:8000
+uv add <pkg>                          # add a dependency
 ```
 
 The preview server is configured in [.claude/launch.json](.claude/launch.json)
@@ -95,6 +114,7 @@ as `simsy-viewer`.
 | [test_scheduling.py](tests/test_scheduling.py) | population cap, spawn+despawn, deterministic timeline |
 | [test_config.py](tests/test_config.py) | defaults when absent, partial override, unknown-key tolerance |
 | [test_components.py](tests/test_components.py) | components driven in isolation: SlotSet lifecycle, Drives growth/clamp, Locomotor goal/clear |
+| [test_queue.py](tests/test_queue.py) | Queue FIFO/wait-slots standalone; one-slot counter serializes a crowd (micro-scene) |
 
 ## Entity-component model (§6)
 
@@ -117,6 +137,9 @@ lifecycle) as thin accessors onto their components — see architecture doc §6.
   layer does not exist yet.
 - Walls are still raw grid obstacles, not `NavShape(static)` entities; Nav build
   doesn't yet query entities (deferred to the scene-as-data phase).
+- Queue-aware utility is partial: full queue-objects stay candidates, but score
+  isn't yet discounted by line length (so agents don't prefer shorter queues).
+  Deferred until there are ≥2 objects serving one need to choose between.
 
 When adding a tunable constant, add it to [config.py](simsy/config.py) (with a
 default) and surface it in [config.yaml](config.yaml) rather than hardcoding it.
