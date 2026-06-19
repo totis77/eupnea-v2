@@ -14,7 +14,7 @@ def _open_grid() -> NavGrid:
 
 def _agent(aid: str, pos, goal) -> Agent:
     a = Agent(aid, pos, {"x": 0.0}, {"x": 0.0})
-    a.set_goal(goal)
+    a.locomotor.set_goal(goal)
     return a
 
 
@@ -37,7 +37,7 @@ def test_head_on_agents_avoid_without_interpenetration():
     min_dist = _run([a, b], 120)
     combined = a.radius + b.radius  # 1.2
     assert min_dist >= combined - 0.15, f"agents interpenetrated: {min_dist:.3f}"
-    assert a.at_goal and b.at_goal, "both should still reach their goals"
+    assert a.locomotor.at_goal and b.locomotor.at_goal, "both should still reach their goals"
 
 
 def test_orca_is_deterministic():

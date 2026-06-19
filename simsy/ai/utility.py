@@ -42,9 +42,10 @@ def best_candidate(
     returns objects ordered by id, so ties resolve identically every run.
     """
     best: Candidate | None = None
-    for need in sorted(agent.needs):
+    needs = agent.drives.needs
+    for need in sorted(needs):
         for obj in world.query(need, only_available=True):
-            s = score(agent.needs[need], obj.advertised_amount(need), exponent)
+            s = score(needs[need], obj.advertised_amount(need), exponent)
             if best is None or s > best.score:
                 best = Candidate(need=need, obj=obj, score=s)
     return best

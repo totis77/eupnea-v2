@@ -43,39 +43,41 @@ class Locomotion:
     def update(self, agents: list["Agent"], ctx: "SimContext") -> None:
         ordered = sorted(agents, key=lambda a: a.id)
         pos = {a.id: a.position for a in ordered}
-        vel = {a.id: a.vel for a in ordered}  # last tick's velocities
+        vel = {a.id: a.locomotor.vel for a in ordered}  # last tick's velocities
 
         # Pass 1: ORCA velocity for each moving agent (read-only snapshot).
         for a in ordered:
-            if a.goal is None or a.at_goal:
-                a.vel = (0.0, 0.0)  # idle/occupying agents are static neighbours
+            lo = a.locomotor
+            if lo.goal is None or lo.at_goal:
+                lo.vel = (0.0, 0.0)  # idle/occupying agents are static neighbours
                 continue
-            if a.path is None:
-                a.path = find_path(self.grid, a.position, a.goal) or [a.goal]
-                a.path_idx = 0
+            if lo.path is None:
+                lo.path = find_path(self.grid, a.position, lo.goal) or [lo.goal]
+                lo.path_idx = 0
             self._advance_waypoint(a)
             pref = self._seek(a)
             neighbors = self._neighbors(a, ordered, pos, vel)
             v = orca_velocity(
                 Vec2(*pos[a.id]), Vec2(*vel[a.id]), a.radius,
-                Vec2(*pref), a.speed, neighbors, self.time_horizon, ctx.dt,
+                Vec2(*pref), lo.speed, neighbors, self.time_horizon, ctx.dt,
             )
-            a.vel = (v.x, v.y)
+            lo.vel = (v.x, v.y)
 
         # Pass 2: integrate positions, never letting one enter a blocked cell.
         for a in ordered:
-            if a.vel == (0.0, 0.0):
+            lo = a.locomotor
+            if lo.vel == (0.0, 0.0):
                 continue
             target = (
-                a.position[0] + a.vel[0] * ctx.dt,
-                a.position[1] + a.vel[1] * ctx.dt,
+                a.position[0] + lo.vel[0] * ctx.dt,
+                a.position[1] + lo.vel[1] * ctx.dt,
             )
             a.position = self._resolve(a.position, target)
-            if math.dist(a.position, a.goal) <= self.arrive_eps:
-                a.position = a.goal      # snap exactly onto the interaction point
-                a.at_goal = True
-                a.vel = (0.0, 0.0)
-                a.path = None
+            if math.dist(a.position, lo.goal) <= self.arrive_eps:
+                a.position = lo.goal     # snap exactly onto the interaction point
+                lo.at_goal = True
+                lo.vel = (0.0, 0.0)
+                lo.path = None
 
     def _resolve(self, old, new):
         """Block movement into obstacles; slide along the unobstructed axis."""
@@ -91,21 +93,23 @@ class Locomotion:
 
     # --- steering helpers -------------------------------------------------
     def _advance_waypoint(self, a: "Agent") -> None:
+        lo = a.locomotor
         while (
-            a.path_idx < len(a.path) - 1
-            and math.dist(a.position, a.path[a.path_idx]) < self.waypoint_eps
+            lo.path_idx < len(lo.path) - 1
+            and math.dist(a.position, lo.path[lo.path_idx]) < self.waypoint_eps
         ):
-            a.path_idx += 1
+            lo.path_idx += 1
 
     def _seek(self, a: "Agent") -> tuple[float, float]:
         """Preferred velocity: toward the current waypoint at full speed
         (the arrive_eps snap in pass 2 handles the final landing)."""
-        wx, wy = a.path[a.path_idx]
+        lo = a.locomotor
+        wx, wy = lo.path[lo.path_idx]
         dx, dy = wx - a.position[0], wy - a.position[1]
         d = math.hypot(dx, dy)
         if d == 0.0:
             return 0.0, 0.0
-        return dx / d * a.speed, dy / d * a.speed
+        return dx / d * lo.speed, dy / d * lo.speed
 
     def _neighbors(self, a, ordered, pos, vel):
         ax, ay = pos[a.id]

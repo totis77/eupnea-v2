@@ -55,7 +55,7 @@ class Simulation:
         """Remove agents that have reached an exit object (releasing its slot)."""
         for a in list(self.agents):
             target = a.blackboard.get("target")
-            if target is not None and target.despawns and a.at_goal:
+            if target is not None and target.despawns and a.locomotor.at_goal:
                 target.release(a.id)
                 self.agents.remove(a)
 
@@ -68,7 +68,7 @@ class Simulation:
         motive_score = 0.0
         if a.active_motive is not None and target is not None:
             motive_score = utility.score(
-                a.needs[a.active_motive],
+                a.drives.needs[a.active_motive],
                 target.advertised_amount(a.active_motive),
                 self.config.utility.pressure_exponent,
             )
@@ -79,8 +79,8 @@ class Simulation:
             "node": a.active_node,
             "target": target.id if target is not None else None,
             "score": round(motive_score, 3),
-            "needs": {k: round(v, 2) for k, v in sorted(a.needs.items())},
-            "path": [(round(x, 2), round(y, 2)) for x, y in (a.path or [])],
+            "needs": {k: round(v, 2) for k, v in sorted(a.drives.needs.items())},
+            "path": [(round(x, 2), round(y, 2)) for x, y in (a.locomotor.path or [])],
         }
 
     def snapshot(self) -> dict:
