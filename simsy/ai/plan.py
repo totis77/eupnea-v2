@@ -19,6 +19,8 @@ from typing import TYPE_CHECKING
 
 from .behavior_tree import (
     ConsumeItem,
+    Enter,
+    Occupy,
     PlaceOrder,
     ReceiveItem,
     Release,
@@ -40,11 +42,14 @@ class Step:
       - "acquire": order at a ServicePoint and carry the produced item away.
       - "consume": sit at the target and consume the item to satisfy `need`,
         by `amount` over the interaction.
+      - "use": a plain self-service interaction (occupy then release), satisfying
+        the target's advertised `need`.
+      - "enter": step through a portal to the linked venue.
     """
 
     tag: str
     action: str
-    item: str
+    item: str = ""
     amount: float = 0.0
 
 
@@ -84,6 +89,16 @@ def build_plan_tree(
             steps.append(Sequence(
                 f"consume:{st.item}",
                 [SetTarget(obj), Reserve(), Travel(), ConsumeItem(st.item, need, st.amount), Release()],
+            ))
+        elif st.action == "use":
+            steps.append(Sequence(
+                f"use:{st.tag}",
+                [SetTarget(obj), Reserve(), Travel(), Occupy(), Release()],
+            ))
+        elif st.action == "enter":
+            steps.append(Sequence(
+                f"enter:{st.tag}",
+                [SetTarget(obj), Travel(), Enter()],
             ))
         else:  # pragma: no cover - guards a malformed recipe
             return None

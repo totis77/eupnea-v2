@@ -31,17 +31,17 @@ simsy/                 # THE ENGINE — reusable AI mechanics; no scene content
     events.py          # queued EventBus (drained in insertion order)
   components/          # entity components (§6D), grouped by tier
     representation.py  # Transform (pose) + NavShape (engine collision proxy) + RenderShape (viewer-only)
-    state.py           # Capability/State tier: Drives, Locomotor, Blackboard, Role, Inventory (agent-side)
+    state.py           # Capability/State: Drives, Locomotor, Blackboard, Role, Inventory, GroupMember, Mood
   world/
     entity.py          # Entity: id + Transform/NavShape/RenderShape + typed component bag (§6A)
-    smart_object.py    # entity holding Affordance + SlotSet + opt-in Queue / ServicePoint + tags; `despawns` exits
+    smart_object.py    # entity holding Affordance + SlotSet + opt-in Queue / ServicePoint / Portal + tags; `despawns` exits
     registry.py        # object lookup (global tier + by_tag; local hash-grid tier still a TODO)
   ai/
     utility.py         # object-advertised scorer; pressure curve, hysteresis, idle threshold
-    behavior_tree.py   # Status/Sequence + Reserve/Travel/Occupy/Release/Order/Receive/Consume leaves; ATOMIC guard, OnAbort
+    behavior_tree.py   # Status/Sequence + Reserve/Travel/Occupy/Release/Order/Receive/Consume/Enter leaves; ATOMIC guard, OnAbort
     controller.py      # default brain (§6E): Utility(select) → BT(execute); per-target tree + recipe plans
     fsm.py             # alternative pluggable brain: FSM controller + serve_fsm (staff/barista)
-    plan.py            # scripted multi-step recipes (Step) → build_plan_tree compiles to a BT
+    plan.py            # scripted multi-step recipes (Step: acquire/consume/use/enter) → build_plan_tree
   agents/
     agent.py           # entity composing Drives+Locomotor+Blackboard+Controller; cognition vs locomotion split
     spawning.py        # AgentArchetype (flyweight) + Spawner (seed-driven arrivals)
@@ -62,6 +62,9 @@ projects/              # PROJECTS — self-contained scenarios; own their assets
     queue/             # one contended counter + a line (the Queue feature)
     service/           # a staffed counter + barista (ServicePoint + FSM controller)
     plan/              # order coffee → sit & drink it (multi-step recipe + Inventory)
+    group/             # a group that travels together (GroupMember cohesion)
+    venue/             # two rooms split by a wall, crossed via a Portal
+    mood/              # queue waiting builds stress → impatience (Mood)
 tests/                 # pytest suite (see below)
 ```
 
@@ -126,14 +129,17 @@ as `simsy-viewer`.
 | [test_service.py](tests/test_service.py) | FSM + ServicePoint standalone; barista serves a line; no server ⇒ nobody served |
 | [test_plan.py](tests/test_plan.py) | recipe compilation standalone; order-coffee→sit&drink across two objects with a carried item |
 | [test_cafe.py](tests/test_cafe.py) | full café scene runs, serves a steady stream, keeps staff; deterministic |
+| [test_group.py](tests/test_group.py) | group cohesion keeps members tighter than no cohesion; deterministic |
+| [test_venue.py](tests/test_venue.py) | Portal links target; guests cross a gapless wall via the portal and get served |
+| [test_mood.py](tests/test_mood.py) | Mood clamps; queue waiting builds stress; deterministic |
 
 ## Entity-component model (§6)
 
 `Agent` and `SmartObject` are **entities composed from components**
 ([world/entity.py](simsy/world/entity.py)), in three tiers: Representation
 (`Transform`/`NavShape`/`RenderShape`), Capability/State (`Drives`, `Locomotor`,
-`Blackboard`, `Role`, `Inventory`; world-side `Affordance`, `SlotSet`, `Queue`,
-`ServicePoint`), and a pluggable Controller
+`Blackboard`, `Role`, `Inventory`, `GroupMember`, `Mood`; world-side `Affordance`,
+`SlotSet`, `Queue`, `ServicePoint`, `Portal`), and a pluggable Controller
 (`Utility→BT`, [ai/controller.py](simsy/ai/controller.py)) — or any brain with
 the same `think/act` + `active_motive/active_node` interface, e.g. the
 [ai/fsm.py](simsy/ai/fsm.py) `FSM` that drives staff (a barista's
@@ -161,6 +167,10 @@ lifecycle) as thin accessors onto their components — see architecture doc §6.
 - Queue-aware utility is partial: full queue-objects stay candidates, but score
   isn't yet discounted by line length (so agents don't prefer shorter queues).
   Deferred until there are ≥2 objects serving one need to choose between.
+- Portals are recipe-driven (an `enter` step), not autonomous: A* doesn't route
+  across portals on its own, so a cross-venue journey must be authored as a recipe.
+- Groups travel together via locomotion cohesion only; no shared group
+  decision-making (members still pick their own motives independently).
 
 When adding a tunable constant, add it to [config.py](simsy/config.py) (with a
 default) and surface it in [config.yaml](config.yaml) rather than hardcoding it.

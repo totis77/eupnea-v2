@@ -177,6 +177,16 @@ class ServicePoint:
             self._ready.add(guest_id)
 
 
+class Portal:
+    """A link to another place (architecture doc §6D). Reaching a portal moves
+    the agent to `target` — the connected portal in another venue/room. The two
+    sides need not share a walkable path, so this is how an agent crosses between
+    venues that A* can't route between directly."""
+
+    def __init__(self, target: tuple[float, float]) -> None:
+        self.target = target
+
+
 class SmartObject:
     def __init__(
         self,
@@ -204,6 +214,7 @@ class SmartObject:
         self.slot_set = self.entity.add(SlotSet(slots))
         self.queue: Queue | None = None  # opt-in via enable_queue() for contended objects
         self.service_point: ServicePoint | None = None  # opt-in via enable_service() for staffed objects
+        self.portal: Portal | None = None  # opt-in via enable_portal() for cross-venue links
         self.interaction_ticks = interaction_ticks
         self.despawns = despawns  # reaching this object removes the agent (an exit)
 
@@ -234,6 +245,11 @@ class SmartObject:
         pickup = (px + pickup_offset[0], py + pickup_offset[1])
         self.service_point = self.entity.add(ServicePoint(pickup))
         return self.service_point
+
+    def enable_portal(self, target: tuple[float, float]) -> "Portal":
+        """Link this object to `target` (the connected portal's position)."""
+        self.portal = self.entity.add(Portal(target))
+        return self.portal
 
     # --- pose accessors (single source of truth = the entity) -------------
     @property

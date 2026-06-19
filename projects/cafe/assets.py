@@ -72,6 +72,7 @@ def guest_archetype(cfg: "Config") -> AgentArchetype:
         spread=cfg.population.need_spread,
         utility_cfg=cfg.utility,
         recipes={"Caffeine": COFFEE_RECIPE},
+        with_mood=True,  # stress builds while queuing → impatience
     )
 
 

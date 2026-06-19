@@ -295,6 +295,21 @@ class ConsumeItem(Node):
             agent.blackboard.pop(key, None)
 
 
+class Enter(Node):
+    """Step through a portal: on arrival, teleport to its linked target (the
+    connected venue) and clear the goal so the next step plans afresh."""
+
+    name = "Enter"
+
+    def tick(self, agent: "Agent", ctx: "SimContext") -> Status:
+        obj = _target(agent)
+        if obj is None or obj.portal is None:
+            return Status.FAILURE
+        agent.position = obj.portal.target
+        agent.locomotor.clear_goal()
+        return Status.SUCCESS
+
+
 def interaction_tree() -> Sequence:
     """The standard self-service smart-object sequence."""
     return Sequence(

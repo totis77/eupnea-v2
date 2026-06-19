@@ -153,9 +153,17 @@ scenes expressed as Python `build()` for now (data-driven deferred to Phase 3).
       it at a seat (Caffeine satisfied only on consume). Surfaced + fixed the §2B
       gap: a rising drive interrupted drinking mid-sip → added an `ATOMIC` guard
       so `Occupy`/`Consume` can't be interrupted. 35/35 green; determinism holds.
-- [ ] 2E **Groups** (`GroupMember`): arrive and move together.
-- [ ] 2F **Portals / multi-venue** (`Portal`): multiple venues, cross-venue nav.
-- [ ] 2G *(stretch)* mood/affect modulating utility.
+- [x] 2E **Groups** (`GroupMember`): Locomotion steers members toward their
+      group centroid (config `group_cohesion`), so they travel as a cluster.
+      `projects/micro/group/`; cohesion reduces group spread vs none.
+- [x] 2F **Portals / multi-venue** (`Portal`): a `Portal` component + `Enter` BT
+      leaf teleport an agent to the linked venue; recipe gains `enter`/`use`
+      actions. `projects/micro/venue/` = two rooms split by a gapless wall,
+      crossed only via the portal. (Recipe-driven, not autonomous A* routing.)
+- [x] 2G **Mood/affect** (`Mood`): stress rises while queue-waiting, eases
+      otherwise, and feeds the Leave drive (impatience). `MoodCfg` knobs; surfaced
+      in the snapshot + viewer (stress bar); wired into the café guests.
+      `projects/micro/mood/`.
 
 ## Status log
 - _(start)_ — plan created; beginning Task 1.
@@ -208,3 +216,9 @@ scenes expressed as Python `build()` for now (data-driven deferred to Phase 3).
   ready leak (drinks for guests who left are discarded). ~80% of guests served;
   37/37 green; live via `simsy-cafe-viewer`. Deferred per roadmap: groups (2E),
   other venues/portals (2F), literal cashier↔pickup-bar split.
+- **Phase 2 complete.** 2E groups (locomotion cohesion), 2F portals/multi-venue
+  (`Portal` + `Enter` + recipe `enter`/`use`), 2G mood (stress→impatience, in the
+  café + viewer stress bar). Each behind a micro-scene + tests. 45/45 green.
+  Remaining as future work (noted in CLAUDE stubs): autonomous portal routing in
+  A*, shared group decision-making, café cashier↔pickup split, scene-as-data
+  (Phase 3) and the GUI (Phase 4).

@@ -91,3 +91,23 @@ class Inventory:
 
     def has(self, item: str) -> bool:
         return item in self.items
+
+
+@dataclass
+class GroupMember:
+    """Marks an agent as part of a group (`group_id`). The Locomotion system
+    steers members toward their group's centroid so they travel together."""
+
+    group_id: str
+
+
+@dataclass
+class Mood:
+    """Lightweight affect (0..100 stress). Rises while waiting in a queue, eases
+    when idle/satisfied; the higher it is, the more impatient the agent (its
+    Leave drive grows faster). Modulates behaviour without a new controller."""
+
+    stress: float = 0.0
+
+    def adjust(self, delta: float) -> None:
+        self.stress = max(0.0, min(100.0, self.stress + delta))

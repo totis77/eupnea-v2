@@ -278,7 +278,12 @@ function updateCards(){
     const needs = Object.entries(a.needs).map(([k, v]) =>
       `<div class="bar"><span class="label">${k}</span>
         <span class="track"><span class="fill" style="width:${v}%;background:${NEED_COLOR[k] || '#58a6ff'}"></span></span>
-        <span class="val">${v.toFixed(0)}</span></div>`).join("");
+        <span class="val">${v.toFixed(0)}</span></div>`).join("")
+      + (a.stress != null
+        ? `<div class="bar"><span class="label">stress</span>
+            <span class="track"><span class="fill" style="width:${a.stress}%;background:#f85149"></span></span>
+            <span class="val">${a.stress.toFixed(0)}</span></div>`
+        : "");
     return `<div class="agent-card">
       <div class="name"><span><span class="dot" style="background:${motiveColor(a.motive)}"></span> ${a.id}</span>
         <span style="color:var(--muted)">${a.motive ? a.score.toFixed(2) : ""}</span></div>

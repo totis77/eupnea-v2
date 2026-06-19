@@ -34,6 +34,7 @@ class AgentArchetype:
     spread: float = 12.0  # +/- jitter applied to non-"Leave" initial needs
     utility_cfg: UtilityCfg | None = None
     recipes: dict | None = None  # multi-step recipes per need (e.g. how to get Caffeine)
+    with_mood: bool = False      # give spawned agents a Mood (stress/impatience)
 
     def spawn(self, agent_id: str, pos: tuple[float, float], rng: "random.Random") -> Agent:
         needs = {}
@@ -47,6 +48,7 @@ class AgentArchetype:
             radius=self.radius,
             utility_cfg=self.utility_cfg,
             recipes=self.recipes,
+            with_mood=self.with_mood,
         )
 
 
