@@ -160,9 +160,72 @@ class Release(Node):
         return Status.SUCCESS
 
 
+class PlaceOrder(Node):
+    """At a ServicePoint: place an order, then free the register slot so the
+    line moves while the server works the backlog."""
+
+    name = "Order"
+
+    def tick(self, agent: "Agent", ctx: "SimContext") -> Status:
+        obj = _target(agent)
+        if obj is None or obj.service_point is None:
+            return Status.FAILURE
+        obj.service_point.place_order(agent.id)
+        obj.release(agent.id)  # ordering done; release the register for the next guest
+        return Status.SUCCESS
+
+    def abort(self, agent: "Agent", ctx: "SimContext") -> None:
+        obj = _target(agent)
+        if obj is not None and obj.service_point is not None:
+            obj.service_point.cancel(agent.id)
+
+
+class Receive(Node):
+    """Wait at the pickup spot until the server marks the order ready, then
+    collect it and satisfy the need."""
+
+    name = "Receive"
+
+    def tick(self, agent: "Agent", ctx: "SimContext") -> Status:
+        obj = _target(agent)
+        if obj is None or obj.service_point is None:
+            return Status.FAILURE
+        sp = obj.service_point
+        agent.locomotor.set_goal(sp.pickup)
+        if not (agent.locomotor.at_goal and sp.is_ready(agent.id)):
+            return Status.RUNNING
+        sp.collect(agent.id)
+        need = agent.active_motive
+        if need is not None:
+            needs = agent.drives.needs
+            needs[need] = max(0.0, needs[need] - obj.advertised_amount(need))
+        return Status.SUCCESS
+
+    def abort(self, agent: "Agent", ctx: "SimContext") -> None:
+        obj = _target(agent)
+        if obj is not None and obj.service_point is not None:
+            obj.service_point.cancel(agent.id)
+
+
 def interaction_tree() -> Sequence:
-    """The standard smart-object interaction sequence."""
+    """The standard self-service smart-object sequence."""
     return Sequence(
         "UseSmartObject",
         [Reserve(), Travel(), Occupy(), Release()],
     )
+
+
+def service_tree() -> Sequence:
+    """A staffed-object sequence: queue to the register, order (and free it),
+    then wait at pickup for the server to fulfill the order."""
+    return Sequence(
+        "UseServicePoint",
+        [Reserve(), Travel(), PlaceOrder(), Receive()],
+    )
+
+
+def tree_for(obj) -> Sequence:
+    """Pick the interaction tree appropriate to the target object."""
+    if getattr(obj, "service_point", None) is not None:
+        return service_tree()
+    return interaction_tree()

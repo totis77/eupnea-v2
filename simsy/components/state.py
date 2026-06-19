@@ -65,3 +65,12 @@ class Locomotor:
         self.path_idx = 0
         self.vel = (0.0, 0.0)
         self.at_goal = False
+
+
+@dataclass
+class Role:
+    """What an agent *is* in the scenario — e.g. "guest" or "barista". Staff
+    carry a role and a non-Utility controller (an FSM); the role is the marker
+    systems/queries use to tell staff from patrons."""
+
+    name: str

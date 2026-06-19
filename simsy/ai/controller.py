@@ -19,7 +19,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from . import utility
-from .behavior_tree import Sequence, Status, interaction_tree
+from .behavior_tree import Sequence, Status, tree_for
 
 if TYPE_CHECKING:
     from ..agents.agent import Agent
@@ -64,7 +64,7 @@ class Controller:
     def _adopt(self, agent: "Agent", cand: utility.Candidate) -> None:
         self.active_motive = cand.need
         agent.blackboard["target"] = cand.obj
-        self._tree = interaction_tree()
+        self._tree = tree_for(cand.obj)
 
     def _abort_current(self, agent: "Agent", ctx: "SimContext") -> None:
         if self._tree is not None:
