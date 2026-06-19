@@ -115,6 +115,66 @@ class Queue:
         return agent_id in self._line
 
 
+class ServicePoint:
+    """Marks an object as needing a *server* (staff) to fulfill interactions
+    (architecture doc §6D). Holds an order ledger: a guest places an order, a
+    server brews it (FIFO), marks it ready, and the guest collects it at the
+    pickup spot. This decouples *ordering* (briefly at the register) from
+    *receiving* (later, at pickup) — the register slot frees as soon as the
+    order is in, so the line keeps moving while the server works the backlog."""
+
+    def __init__(self, pickup: tuple[float, float]) -> None:
+        self.pickup = pickup        # where guests wait to collect their order
+        self._pending: list[str] = []   # ordered, awaiting a server (FIFO)
+        self._in_progress: str | None = None  # the order being brewed now
+        self._ready: set[str] = set()       # brewed, awaiting collection
+
+    # --- guest side -------------------------------------------------------
+    def place_order(self, guest_id: str) -> None:
+        """Enqueue an order. Idempotent; ignores guests already in the system."""
+        if (
+            guest_id != self._in_progress
+            and guest_id not in self._pending
+            and guest_id not in self._ready
+        ):
+            self._pending.append(guest_id)
+
+    def is_ready(self, guest_id: str) -> bool:
+        return guest_id in self._ready
+
+    def collect(self, guest_id: str) -> bool:
+        """Take a ready order. True if there was one to collect."""
+        if guest_id in self._ready:
+            self._ready.discard(guest_id)
+            return True
+        return False
+
+    def cancel(self, guest_id: str) -> None:
+        """Drop a guest's order anywhere in the pipeline (OnAbort/despawn)."""
+        if guest_id in self._pending:
+            self._pending.remove(guest_id)
+        if self._in_progress == guest_id:
+            self._in_progress = None
+        self._ready.discard(guest_id)
+
+    # --- server side ------------------------------------------------------
+    def next_order(self) -> str | None:
+        """The next order a free server should start (FIFO head), or None."""
+        return self._pending[0] if self._pending else None
+
+    def begin(self, guest_id: str) -> None:
+        """Server starts brewing this order."""
+        if guest_id in self._pending:
+            self._pending.remove(guest_id)
+            self._in_progress = guest_id
+
+    def mark_ready(self, guest_id: str) -> None:
+        """Server finishes; the order moves to the pickup counter."""
+        if self._in_progress == guest_id:
+            self._in_progress = None
+        self._ready.add(guest_id)
+
+
 class SmartObject:
     def __init__(
         self,
@@ -137,6 +197,7 @@ class SmartObject:
         self.affordances = {a.need: a for a in affordances}
         self.slot_set = self.entity.add(SlotSet(slots))
         self.queue: Queue | None = None  # opt-in via enable_queue() for contended objects
+        self.service_point: ServicePoint | None = None  # opt-in via enable_service() for staffed objects
         self.interaction_ticks = interaction_ticks
         self.despawns = despawns  # reaching this object removes the agent (an exit)
 
@@ -159,6 +220,14 @@ class SmartObject:
         step = (ux * spacing, uy * spacing)
         self.queue = self.entity.add(Queue(anchor, step))
         return self.queue
+
+    def enable_service(self, pickup_offset: tuple[float, float] = (0.0, -3.0)) -> "ServicePoint":
+        """Require a server to fulfill interactions. `pickup_offset` is where
+        guests wait to collect, relative to the object."""
+        px, py = self.position
+        pickup = (px + pickup_offset[0], py + pickup_offset[1])
+        self.service_point = self.entity.add(ServicePoint(pickup))
+        return self.service_point
 
     # --- pose accessors (single source of truth = the entity) -------------
     @property

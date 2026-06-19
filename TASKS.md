@@ -131,9 +131,17 @@ scenes expressed as Python `build()` for now (data-driven deferred to Phase 3).
       motive squats on the slot and blocks the line — the scene needs a reason to
       leave (Leave drive + exit), which the micro-scene now has. 24/24 green;
       coffee-shop line forms/shuffles/drains; determinism holds.
-- [ ] 2C **ServicePoint + staff (FSM controller).** A barista entity serves the
-      counter, driven by an FSM controller — proves the Controller is pluggable
-      beyond Utility→BT (§6E).
+- [x] 2C **ServicePoint + staff (FSM controller).** New `ai/fsm.py` (generic
+      `FSM` controller + `serve_fsm` staff brain), `Role` component, and world-side
+      `ServicePoint` (order ledger: pending→in-progress→ready + pickup spot).
+      Guest interaction with a staffed object is now Reserve→Travel→**Order**→
+      **Receive** (new BT leaves; `tree_for(obj)` selects self-service vs staffed).
+      `Agent(..., controller=…)` lets a barista run an FSM instead of Utility→BT —
+      ticked identically by the engine, proving the Controller slot is pluggable
+      (§6E). Isolated in `projects/micro/service/`; `with_barista=False` shows
+      orders pile up unserved. 30/30 green; headless run shows the full
+      queue→order→brew→pickup→leave loop; determinism holds. Coffee-shop espresso
+      left self-serve for now (optional follow-up to staff it).
 - [ ] 2D **Multi-step interaction plans** (queue → order → wait → receive).
 - [ ] 2E **Groups** (`GroupMember`): arrive and move together.
 - [ ] 2F **Portals / multi-venue** (`Portal`): multiple venues, cross-venue nav.
@@ -169,5 +177,9 @@ scenes expressed as Python `build()` for now (data-driven deferred to Phase 3).
 - 2B (Queue) done — `Queue` component + queue-aware `Reserve` leaf + utility
   keeping full queue-objects as candidates; `projects/micro/queue/` isolation
   scene. Found/fixed the "served agent squats on the slot" deadlock (scene needs
-  a Leave drive). 24/24 green; coffee-shop line forms and drains. Next: 2C
-  ServicePoint + staff (FSM controller).
+  a Leave drive). 24/24 green; coffee-shop line forms and drains.
+- 2C (ServicePoint + staff) done — generic `FSM` controller proves the Controller
+  slot is pluggable (barista runs idle→brewing, ticked like patrons); world-side
+  `ServicePoint` order ledger + `Role`; guest flow Reserve→Travel→Order→Receive.
+  `projects/micro/service/` isolates it (toggle `with_barista`). 30/30 green;
+  full order→brew→pickup→leave loop verified headless. Next: 2D multi-step plans.

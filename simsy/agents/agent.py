@@ -38,6 +38,7 @@ class Agent:
         think_period_ticks: int = 5,
         radius: float = 0.6,
         utility_cfg: UtilityCfg | None = None,
+        controller: object | None = None,
     ) -> None:
         self.entity = Entity(
             agent_id,
@@ -49,10 +50,12 @@ class Agent:
         self.drives = self.entity.add(Drives(dict(needs), dict(need_growth)))
         self.locomotor = self.entity.add(Locomotor(speed=speed))
         self.blackboard = self.entity.add(Blackboard())
-        # Controller tier (the brain).
+        # Controller tier (the brain). Defaults to Utility→BT; a different brain
+        # (e.g. an FSM for staff) can be supplied — the engine only needs the
+        # think/act + active_motive/active_node interface.
         self.think_period_ticks = think_period_ticks
         self.ucfg = utility_cfg or UtilityCfg()
-        self.controller = self.entity.add(Controller(self.ucfg))
+        self.controller = self.entity.add(controller or Controller(self.ucfg))
 
     # --- pose accessors (single source of truth = the entity) -------------
     @property

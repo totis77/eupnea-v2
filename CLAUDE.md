@@ -31,15 +31,16 @@ simsy/                 # THE ENGINE — reusable AI mechanics; no scene content
     events.py          # queued EventBus (drained in insertion order)
   components/          # entity components (§6D), grouped by tier
     representation.py  # Transform (pose) + NavShape (engine collision proxy) + RenderShape (viewer-only)
-    state.py           # Capability/State tier: Drives, Locomotor, Blackboard (agent-side)
+    state.py           # Capability/State tier: Drives, Locomotor, Blackboard, Role (agent-side)
   world/
     entity.py          # Entity: id + Transform/NavShape/RenderShape + typed component bag (§6A)
-    smart_object.py    # entity holding Affordance + SlotSet (Reserve→Occupy→Release); `despawns` exits
+    smart_object.py    # entity holding Affordance + SlotSet + opt-in Queue / ServicePoint; `despawns` exits
     registry.py        # object lookup (global tier; local hash-grid tier still a TODO)
   ai/
     utility.py         # object-advertised scorer; pressure curve, hysteresis, idle threshold
-    behavior_tree.py   # Status/Sequence + Reserve/Travel/Occupy/Release leaves, OnAbort
-    controller.py      # the pluggable brain (§6E): Utility(select) → BT(execute) glue
+    behavior_tree.py   # Status/Sequence + Reserve/Travel/Occupy/Release + Order/Receive leaves, OnAbort
+    controller.py      # default brain (§6E): Utility(select) → BT(execute) glue; picks tree per target
+    fsm.py             # alternative pluggable brain: FSM controller + serve_fsm (staff/barista)
   agents/
     agent.py           # entity composing Drives+Locomotor+Blackboard+Controller; cognition vs locomotion split
     spawning.py        # AgentArchetype (flyweight) + Spawner (seed-driven arrivals)
@@ -55,6 +56,7 @@ projects/              # PROJECTS — self-contained scenarios; own their assets
     assets.py          # resources: object kinds (espresso/couch/exit) + guest archetype
   micro/               # tiny single-feature projects for isolation testing
     queue/             # one contended counter + a line (the Queue feature)
+    service/           # a staffed counter + barista (ServicePoint + FSM controller)
 tests/                 # pytest suite (see below)
 ```
 
@@ -115,6 +117,7 @@ as `simsy-viewer`.
 | [test_config.py](tests/test_config.py) | defaults when absent, partial override, unknown-key tolerance |
 | [test_components.py](tests/test_components.py) | components driven in isolation: SlotSet lifecycle, Drives growth/clamp, Locomotor goal/clear |
 | [test_queue.py](tests/test_queue.py) | Queue FIFO/wait-slots standalone; one-slot counter serializes a crowd (micro-scene) |
+| [test_service.py](tests/test_service.py) | FSM + ServicePoint standalone; barista serves a line; no server ⇒ nobody served |
 
 ## Entity-component model (§6)
 
@@ -122,7 +125,11 @@ as `simsy-viewer`.
 ([world/entity.py](simsy/world/entity.py)), in three tiers: Representation
 (`Transform`/`NavShape`/`RenderShape`), Capability/State (`Drives`, `Locomotor`,
 `Blackboard`; world-side `Affordance`, `SlotSet`), and a pluggable Controller
-(`Utility→BT`, [ai/controller.py](simsy/ai/controller.py)). The engine reads
+(`Utility→BT`, [ai/controller.py](simsy/ai/controller.py)) — or any brain with
+the same `think/act` + `active_motive/active_node` interface, e.g. the
+[ai/fsm.py](simsy/ai/fsm.py) `FSM` that drives staff (a barista's
+`idle→brewing`). Swapping a brain is one `Agent(..., controller=…)` arg; the
+engine ticks staff and patrons identically. The engine reads
 `Transform`+`NavShape`+components and **never `RenderShape`** (§6B headless
 boundary). `Agent`/`SmartObject` expose `id`/`position`/`radius` (and the object
 lifecycle) as thin accessors onto their components — see architecture doc §6.
