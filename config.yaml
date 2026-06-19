@@ -1,0 +1,47 @@
+# simsy configuration — tunable subsystem parameters.
+#
+# This file parameterizes *how* the engine behaves. It does NOT define scene
+# content (which smart objects exist, wall geometry) — that is the DSL/authoring
+# layer's job (architecture doc 3E). Every key below is optional; anything
+# omitted falls back to the in-code default in simsy/config.py.
+
+simulation:
+  seed: 42              # seeded RNG -> deterministic replay
+  tick_rate_hz: 10.0    # fixed-timestep ticks per second (dt = 1 / tick_rate_hz)
+
+world:
+  bounds: [-26.0, -13.0, 26.0, 13.0]   # min_x, min_y, max_x, max_y
+  cell_size: 1.0                        # nav-grid cell size
+
+agent:
+  radius: 0.6              # also the obstacle inflation distance
+  speed: 4.0               # units/second
+  think_period_ticks: 5    # cognitive LOD: re-plan every N ticks (staggered)
+
+utility:
+  hysteresis: 1.2          # a new motive must beat the active one by this factor
+  idle_threshold: 0.02     # below this score, an agent idles instead of acting
+  pressure_exponent: 2.0   # drive response curve: (drive/100) ** exponent
+
+locomotion:
+  arrive_eps: 0.35         # final-goal arrival distance
+  waypoint_eps: 0.6        # advance to next path waypoint within this distance
+
+orca:
+  time_horizon: 2.0        # seconds of look-ahead for collision avoidance
+  neighbor_distance: 10.0  # only avoid neighbours within this range
+
+population:
+  initial: 3                     # agents present at tick 0
+  max: 8                         # population cap
+  spawn_interval_ticks: [15, 45] # min/max ticks between arrivals (seed-driven)
+  need_spread: 12.0              # +/- jitter applied to each guest's initial drives
+
+archetype:                       # default "guest" template
+  needs:  { Caffeine: 55.0, Rest: 55.0, Leave: 0.0 }
+  growth: { Caffeine: 4.0,  Rest: 3.0,  Leave: 2.5 }   # units/second; Leave only grows
+
+server:
+  http_port: 8000
+  ws_port: 8765
+  snapshot_hz: 10.0        # broadcast rate; decoupled from tick_rate_hz to save bandwidth

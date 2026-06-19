@@ -1,0 +1,18 @@
+[project]
+name = "simsy"
+version = "0.1.0"
+description = "Multi-character systemic simulation authoring tool and engine (Utility AI + Behavior Trees + Smart Objects)"
+requires-python = ">=3.13"
+dependencies = [
+    "pyyaml>=6.0.3",
+    "websockets>=16.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
