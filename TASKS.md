@@ -102,6 +102,43 @@ Decisions:
       20/20 green; viewer re-verified (no console errors); committed on branch
       `phase-1-entity-components` (3690526).
 
+---
+
+## Phase 2 — Features as components (each behind a micro-scene + test)
+**Goal:** grow the whiteboard scenario (queues, baristas, groups, venues) one
+capability at a time. Each feature = new component(s) + a micro-scene project +
+isolation tests, with all existing tests green. Mode: slice-by-slice review;
+scenes expressed as Python `build()` for now (data-driven deferred to Phase 3).
+
+- [x] 2A **Project structure (engine ↔ project boundary).** `simsy/` is now
+      engine-only mechanics; scenarios live under `projects/` as self-contained
+      folders that own assets+scene and reference the engine. Added
+      `simsy/project.py` (`build_project(name)` loader) and `simsy/run.py`
+      (generic headless runner); relocated the coffee shop to
+      `projects/coffee_shop/` (`assets.py` = object kinds + archetype;
+      `project.py` = scene placement). Removed `build_coffee_shop`/`main` from
+      `sim.py`; retargeted `server.py` + 3 test files. 20/20 green; runner output
+      byte-identical; server boots clean. Per-project `config.yaml` deferred.
+- [x] 2B **Queue.** `Queue` capability component (FIFO line + indexed wait-slots
+      trailing from the object) added to `world/smart_object.py`; `SmartObject.
+      enable_queue()` opts in. The `Reserve` BT leaf is now queue-aware: when full
+      it joins the line (RUNNING, standing in its assigned spot) and advances the
+      head into a freed slot; `OnAbort` leaves the line. Utility now keeps a full
+      object as a candidate **iff it has a queue** (the mandatory half of
+      queue-aware utility; the shorter-line *discount* is deferred to when ≥2
+      counters exist). Espresso enables a queue; new `projects/micro/queue/`
+      isolates it. Surfaced + fixed a real issue: a served agent with no next
+      motive squats on the slot and blocks the line — the scene needs a reason to
+      leave (Leave drive + exit), which the micro-scene now has. 24/24 green;
+      coffee-shop line forms/shuffles/drains; determinism holds.
+- [ ] 2C **ServicePoint + staff (FSM controller).** A barista entity serves the
+      counter, driven by an FSM controller — proves the Controller is pluggable
+      beyond Utility→BT (§6E).
+- [ ] 2D **Multi-step interaction plans** (queue → order → wait → receive).
+- [ ] 2E **Groups** (`GroupMember`): arrive and move together.
+- [ ] 2F **Portals / multi-venue** (`Portal`): multiple venues, cross-venue nav.
+- [ ] 2G *(stretch)* mood/affect modulating utility.
+
 ## Status log
 - _(start)_ — plan created; beginning Task 1.
 - Task 1 done — `NavGrid(inflate=)`; doorway widened to y∈[4,8]; agents cross at
@@ -125,3 +162,12 @@ Decisions:
   committed on branch `phase-1-entity-components` (3690526). `Agent`/`SmartObject`
   are now entities composed from Representation + Capability/State + Controller
   components — the §6 substrate the future scene-as-data/GUI layers will author.
+- **Phase 2 started.** 2A (project structure) done — engine↔project boundary:
+  `simsy/` = mechanics, `projects/coffee_shop/` = self-contained scenario
+  (assets + scene) loaded via `simsy.project.build_project`; generic
+  `python -m simsy.run` runner. 20/20 green, output byte-identical.
+- 2B (Queue) done — `Queue` component + queue-aware `Reserve` leaf + utility
+  keeping full queue-objects as candidates; `projects/micro/queue/` isolation
+  scene. Found/fixed the "served agent squats on the slot" deadlock (scene needs
+  a Leave drive). 24/24 green; coffee-shop line forms and drains. Next: 2C
+  ServicePoint + staff (FSM controller).

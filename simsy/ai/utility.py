@@ -44,7 +44,11 @@ def best_candidate(
     best: Candidate | None = None
     needs = agent.drives.needs
     for need in sorted(needs):
-        for obj in world.query(need, only_available=True):
+        for obj in world.query(need, only_available=False):
+            # A full object is only a candidate if you can wait for it (has a
+            # queue); otherwise it is unusable, exactly as only_available=True.
+            if obj.free_slots <= 0 and obj.queue is None:
+                continue
             s = score(needs[need], obj.advertised_amount(need), exponent)
             if best is None or s > best.score:
                 best = Candidate(need=need, obj=obj, score=s)

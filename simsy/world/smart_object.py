@@ -71,6 +71,50 @@ class SlotSet:
         self._occupants.discard(agent_id)
 
 
+class Queue:
+    """A FIFO waiting line for a contended object (architecture doc §6D).
+
+    Holds agent ids in arrival order and assigns each waiter an indexed standing
+    spot trailing from an anchor, so the line is visible and orderly. The BT's
+    Reserve leaf joins the queue when slots are full and advances the head into a
+    freed slot. Deterministic: order is arrival order, and the engine ticks
+    agents in sorted-id order, so joins/leaves replay identically."""
+
+    def __init__(self, anchor: tuple[float, float], step: tuple[float, float]) -> None:
+        self.anchor = anchor  # world position of the front (index 0) waiting spot
+        self.step = step      # offset between consecutive spots (trails the line)
+        self._line: list[str] = []
+
+    def join(self, agent_id: str) -> int:
+        """Add to the back if not already queued; return the agent's position."""
+        if agent_id not in self._line:
+            self._line.append(agent_id)
+        return self._line.index(agent_id)
+
+    def leave(self, agent_id: str) -> None:
+        if agent_id in self._line:
+            self._line.remove(agent_id)
+
+    def head(self) -> str | None:
+        return self._line[0] if self._line else None
+
+    def index_of(self, agent_id: str) -> int | None:
+        return self._line.index(agent_id) if agent_id in self._line else None
+
+    def wait_slot(self, agent_id: str) -> tuple[float, float] | None:
+        """World position of the standing spot for this agent's current index."""
+        i = self.index_of(agent_id)
+        if i is None:
+            return None
+        return (self.anchor[0] + self.step[0] * i, self.anchor[1] + self.step[1] * i)
+
+    def __len__(self) -> int:
+        return len(self._line)
+
+    def __contains__(self, agent_id: str) -> bool:
+        return agent_id in self._line
+
+
 class SmartObject:
     def __init__(
         self,
@@ -92,8 +136,29 @@ class SmartObject:
         # World-side Capability components.
         self.affordances = {a.need: a for a in affordances}
         self.slot_set = self.entity.add(SlotSet(slots))
+        self.queue: Queue | None = None  # opt-in via enable_queue() for contended objects
         self.interaction_ticks = interaction_ticks
         self.despawns = despawns  # reaching this object removes the agent (an exit)
+
+    def enable_queue(
+        self,
+        direction: tuple[float, float] = (-1.0, 0.0),
+        spacing: float = 1.5,
+        gap: float = 2.0,
+    ) -> "Queue":
+        """Attach a waiting line trailing from the object in `direction`.
+
+        `gap` is the distance from the object to the front spot; `spacing` the
+        distance between waiters. Agents whose Reserve finds the slots full join
+        this line instead of failing."""
+        dx, dy = direction
+        mag = (dx * dx + dy * dy) ** 0.5 or 1.0
+        ux, uy = dx / mag, dy / mag
+        px, py = self.position
+        anchor = (px + ux * gap, py + uy * gap)
+        step = (ux * spacing, uy * spacing)
+        self.queue = self.entity.add(Queue(anchor, step))
+        return self.queue
 
     # --- pose accessors (single source of truth = the entity) -------------
     @property
