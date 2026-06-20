@@ -200,11 +200,14 @@ visually, saves it back, and runs it — driving the same engine. Separate
       renders it statically (objects/walls/staff/entrance), supports **drag-move,
       add, and delete objects**, and Save persists to YAML. Verified end-to-end
       (moved an object → saved ✓ → re-fetched the change). 48/48 green.
-- [ ] 4C **Property panel:** edit a selected entity's kind / affordances / slots /
-      tags and toggle queue·service·portal (inspector is read-only so far).
+- [x] 4C **Property panel.** The inspector is editable: id / kind / pos / slots /
+      tags / affordances, and toggles for queue · service · portal (+ target) ·
+      despawns. Edits update the scene dict live and re-render (focus preserved).
 - [ ] 4D **Walls + spawner/entrance** editing (draw/resize wall rects, move entrance).
-- [ ] 4E **Run from the editor:** a Run button builds a Simulation from the current
-      scene and streams it live, then back to edit.
+- [x] 4E **Run from the editor.** Server `POST /run` builds a Simulation from the
+      posted scene into a swappable `_sim`; the editor's "Run" button posts the
+      current (unsaved) scene and opens the live viewer streaming it; viewer HUD
+      has an "✎ edit" link back. Verified slots=4 edit streamed without saving.
 - [ ] 4F *(advanced)* archetypes/recipes editing.
 
 ## Status log
