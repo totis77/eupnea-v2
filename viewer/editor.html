@@ -33,6 +33,18 @@
     border-radius:4px; padding:3px 5px; font-size:11px; width:130px; }
   #inspect input[type=number] { width:54px; }
   #inspect input[type=checkbox] { width:auto; }
+  #pop { position:absolute; left:10px; top:10px; width:300px; max-height:calc(100% - 20px); overflow:auto;
+    background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px; font-size:12px; display:none; }
+  #pop h3 { margin:10px 0 6px; font-size:13px; } #pop h3:first-child { margin-top:0; }
+  #pop label { display:flex; justify-content:space-between; align-items:center; gap:6px; margin:4px 0; color:var(--muted); }
+  #pop input, #pop select { background:#0e1116; color:var(--ink); border:1px solid var(--line); border-radius:4px; padding:3px 5px; font-size:11px; width:150px; }
+  #pop input[type=number]{ width:60px; } #pop input[type=checkbox]{ width:auto; }
+  #pop .recipe { border:1px solid var(--line); border-radius:6px; padding:6px; margin:5px 0; }
+  #pop .rhead { display:flex; gap:5px; align-items:center; margin-bottom:4px; }
+  #pop .step { display:flex; gap:3px; margin:3px 0; }
+  #pop .step input { width:60px; } #pop .step input.s-tag{ width:78px; } #pop .step select{ width:64px; }
+  #pop button.mini { background:#0e1116; color:var(--muted); border:1px solid var(--line); border-radius:4px; cursor:pointer; font-size:11px; padding:2px 6px; }
+  #pop button.mini:hover { border-color:var(--accent); color:var(--ink); }
 </style>
 </head>
 <body>
@@ -43,6 +55,7 @@
     <button id="add">+ object</button>
     <button id="wall">+ wall</button>
     <button id="del">delete</button>
+    <button id="popbtn">⚙ population</button>
     <div class="spacer"></div>
     <span id="status"></span>
     <button id="run">▶ Run</button>
@@ -52,6 +65,7 @@
   <div id="stage">
     <canvas id="c"></canvas>
     <div id="inspect"></div>
+    <div id="pop"></div>
   </div>
 <script>
 const canvas = document.getElementById("c");
@@ -313,6 +327,97 @@ document.getElementById("add").addEventListener("click", ()=>{
   const o={ id:`object${n}`, kind:"Object", pos:[+cx.toFixed(2),+cy.toFixed(2)], slots:1 };
   scene.objects.push(o); sel={t:"object", o}; updateInspect(); render();
 });
+
+// ---- population: spawner · archetypes · recipes (4F) ---------------------
+let currentArch = null;
+const ACTIONS = ["acquire","consume","use","enter"];
+const kvStr = o => Object.entries(o||{}).map(([k,v])=>`${k}:${v}`).join(", ");
+function parseKV(s){ const o={}; s.split(",").map(x=>x.trim()).filter(Boolean)
+  .forEach(p=>{ const [k,v]=p.split(":"); if (k) o[k.trim()]=+(v||0); }); return o; }
+
+function togglePop(){
+  const el=document.getElementById("pop");
+  const show = !(el.style.display==="block");
+  el.style.display = show ? "block" : "none";
+  document.getElementById("popbtn").style.borderColor = show ? getCss("--accent") : "";
+  if (show){ sel=null; updateInspect(); renderPopulation(); }
+}
+
+function renderPopulation(){
+  const el=document.getElementById("pop");
+  scene.archetypes = scene.archetypes || {};
+  scene.spawner = scene.spawner || {};
+  const names = Object.keys(scene.archetypes);
+  if (!currentArch || !names.includes(currentArch)) currentArch = names[0] || null;
+  const sp = scene.spawner;
+  let html = `<h3>spawner</h3>
+    <label>archetype <select id="p-arch-sel">${names.map(n=>`<option ${n===sp.archetype?'selected':''}>${n}</option>`).join("")}</select></label>
+    <label>max pop <input id="p-max" type="number" value="${sp.max_population??8}"></label>
+    <label>initial <input id="p-init" type="number" value="${sp.initial??0}"></label>
+    <label>interval <span><input id="p-i0" type="number" value="${(sp.interval_ticks||[15,45])[0]}"><input id="p-i1" type="number" value="${(sp.interval_ticks||[15,45])[1]}"></span></label>`;
+  if (currentArch){
+    const a = scene.archetypes[currentArch];
+    const recs = a.recipes||{};
+    html += `<h3>archetype <select id="p-edit-sel">${names.map(n=>`<option ${n===currentArch?'selected':''}>${n}</option>`).join("")}</select></h3>
+      <label>needs <input id="p-needs" value="${kvStr(a.needs)}" placeholder="Caffeine:60"></label>
+      <label>growth <input id="p-growth" value="${kvStr(a.growth)}" placeholder="Caffeine:1"></label>
+      <label class="chk"><input type="checkbox" id="p-mood" ${a.with_mood?'checked':''}> with mood</label>
+      <h3>recipes <button class="mini" id="p-addrec">+ recipe</button></h3>` +
+      Object.keys(recs).map(need=>`<div class="recipe" data-need="${need}">
+        <div class="rhead">need <input class="r-need" value="${need}"><button class="mini r-addstep">+ step</button><button class="mini r-del">×</button></div>
+        <div class="steps">${recs[need].map(st=>`<div class="step">
+          <input class="s-tag" value="${st.tag||''}" placeholder="tag">
+          <select class="s-action">${ACTIONS.map(x=>`<option ${x===st.action?'selected':''}>${x}</option>`).join("")}</select>
+          <input class="s-item" value="${st.item||''}" placeholder="item">
+          <input class="s-amount" type="number" value="${st.amount||0}">
+          <button class="mini s-del">×</button></div>`).join("")}</div></div>`).join("");
+  }
+  el.innerHTML = html;
+
+  el.querySelectorAll("input,select").forEach(inp=>{
+    if (inp.id==="p-arch-sel") inp.addEventListener("change", ()=>{ scene.spawner.archetype=inp.value; });
+    else if (inp.id==="p-edit-sel") inp.addEventListener("change", ()=>{ applyPopulation(); currentArch=inp.value; renderPopulation(); });
+    else { inp.addEventListener("input", applyPopulation); inp.addEventListener("change", applyPopulation); }
+  });
+  el.querySelectorAll(".s-del").forEach(b=>b.addEventListener("click", e=>{ e.target.closest(".step").remove(); applyPopulation(); }));
+  el.querySelectorAll(".r-addstep").forEach(b=>b.addEventListener("click", e=>{
+    applyPopulation(); const need=e.target.closest(".recipe").querySelector(".r-need").value.trim();
+    const recs=scene.archetypes[currentArch].recipes; if (recs[need]) recs[need].push({tag:"",action:"acquire"}); renderPopulation();
+  }));
+  el.querySelectorAll(".r-del").forEach(b=>b.addEventListener("click", e=>{
+    applyPopulation(); const need=e.target.closest(".recipe").querySelector(".r-need").value.trim();
+    delete scene.archetypes[currentArch].recipes[need]; renderPopulation();
+  }));
+  const addrec=document.getElementById("p-addrec");
+  if (addrec) addrec.addEventListener("click", ()=>{
+    applyPopulation(); const a=scene.archetypes[currentArch]; a.recipes=a.recipes||{};
+    let k="need", i=1; while (a.recipes[k]) k="need"+(i++); a.recipes[k]=[]; renderPopulation();
+  });
+}
+
+function applyPopulation(){
+  const g=id=>document.getElementById(id), sp=scene.spawner;
+  sp.max_population = +g("p-max").value||0;
+  sp.initial = +g("p-init").value||0;
+  sp.interval_ticks = [ +g("p-i0").value||0, +g("p-i1").value||0 ];
+  if (!currentArch) return;
+  const a=scene.archetypes[currentArch];
+  a.needs = parseKV(g("p-needs").value);
+  a.growth = parseKV(g("p-growth").value);
+  g("p-mood").checked ? (a.with_mood=true) : delete a.with_mood;
+  const recipes={};
+  document.querySelectorAll("#pop .recipe").forEach(r=>{
+    const need=r.querySelector(".r-need").value.trim(); if (!need) return;
+    recipes[need] = [...r.querySelectorAll(".step")].map(s=>{
+      const st={ tag:s.querySelector(".s-tag").value.trim(), action:s.querySelector(".s-action").value };
+      const item=s.querySelector(".s-item").value.trim(); if (item) st.item=item;
+      const amt=+s.querySelector(".s-amount").value; if (amt) st.amount=amt;
+      return st;
+    });
+  });
+  Object.keys(recipes).length ? (a.recipes=recipes) : delete a.recipes;
+}
+document.getElementById("popbtn").addEventListener("click", togglePop);
 
 loadScenes().then(resize);
 </script>

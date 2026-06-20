@@ -211,7 +211,15 @@ visually, saves it back, and runs it — driving the same engine. Separate
       posted scene into a swappable `_sim`; the editor's "Run" button posts the
       current (unsaved) scene and opens the live viewer streaming it; viewer HUD
       has an "✎ edit" link back. Verified slots=4 edit streamed without saving.
-- [ ] 4F *(advanced)* archetypes/recipes editing.
+- [x] 4F **Archetypes / recipes / spawner editing.** A "⚙ population" panel edits
+      scene-level config: spawner (archetype, max pop, initial, interval), the
+      selected archetype's needs / growth / with-mood, and recipes — per-need
+      ordered step rows (tag · action · item · amount) with add/remove step and
+      add/remove recipe. Writes into the scene dict, so Save/Run include it.
+
+**Phase 4 complete.** The editor can author a whole scenario from scratch —
+geometry (walls, entrance), objects + their components, and the population
+(archetypes/recipes/spawner) — then Save to `scene.yaml` or Run it live.
 
 ## Status log
 - _(start)_ — plan created; beginning Task 1.
