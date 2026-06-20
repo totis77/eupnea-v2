@@ -18,7 +18,17 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from ..ai.controller import Controller
-from ..components import Blackboard, Drives, Locomotor, NavShape, RenderShape, Transform
+from ..components import (
+    Blackboard,
+    Drives,
+    GroupMember,
+    Inventory,
+    Locomotor,
+    Mood,
+    NavShape,
+    RenderShape,
+    Transform,
+)
 from ..config import UtilityCfg
 from ..world.entity import Entity
 
@@ -39,6 +49,9 @@ class Agent:
         radius: float = 0.6,
         utility_cfg: UtilityCfg | None = None,
         controller: object | None = None,
+        recipes: dict | None = None,
+        group_id: str | None = None,
+        with_mood: bool = False,
     ) -> None:
         self.entity = Entity(
             agent_id,
@@ -50,6 +63,12 @@ class Agent:
         self.drives = self.entity.add(Drives(dict(needs), dict(need_growth)))
         self.locomotor = self.entity.add(Locomotor(speed=speed))
         self.blackboard = self.entity.add(Blackboard())
+        self.inventory = self.entity.add(Inventory())
+        # Multi-step recipes: need -> ordered [Step]. Empty = single-interaction.
+        self.recipes = recipes or {}
+        # Optional social/affect components.
+        self.group_member = self.entity.add(GroupMember(group_id)) if group_id else None
+        self.mood = self.entity.add(Mood()) if with_mood else None
         # Controller tier (the brain). Defaults to Utility→BT; a different brain
         # (e.g. an FSM for staff) can be supplied — the engine only needs the
         # think/act + active_motive/active_node interface.
@@ -99,3 +118,8 @@ class Agent:
     @property
     def active_node(self) -> str | None:
         return self.controller.active_node
+
+    @property
+    def plan_view(self) -> dict | None:
+        fn = getattr(self.controller, "plan_view", None)
+        return fn() if fn is not None else None

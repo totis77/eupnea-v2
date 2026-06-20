@@ -20,6 +20,11 @@ if TYPE_CHECKING:
     from ..core.context import SimContext
 
 
+# Blackboard key marking an in-progress *atomic* interaction (§2B): while set,
+# the controller must not switch motives — the agent finishes what it started.
+ATOMIC = "_atomic"
+
+
 class Status(enum.Enum):
     SUCCESS = "success"
     FAILURE = "failure"
@@ -135,18 +140,19 @@ class Occupy(Node):
             need = agent.active_motive
             bb["occupy_need"] = need
             bb["occupy_per_tick"] = obj.advertised_amount(need) / obj.interaction_ticks
+            bb[ATOMIC] = True  # don't let a rising drive interrupt an in-progress use (§2B)
         bb["occupy_ticks_left"] -= 1
         need = bb["occupy_need"]
         needs = agent.drives.needs
         needs[need] = max(0.0, needs[need] - bb["occupy_per_tick"])
         if bb["occupy_ticks_left"] <= 0:
-            for key in ("occupy_ticks_left", "occupy_need", "occupy_per_tick"):
+            for key in ("occupy_ticks_left", "occupy_need", "occupy_per_tick", ATOMIC):
                 bb.pop(key, None)
             return Status.SUCCESS
         return Status.RUNNING
 
     def abort(self, agent: "Agent", ctx: "SimContext") -> None:
-        for key in ("occupy_ticks_left", "occupy_need", "occupy_per_tick"):
+        for key in ("occupy_ticks_left", "occupy_need", "occupy_per_tick", ATOMIC):
             agent.blackboard.pop(key, None)
 
 
@@ -205,6 +211,103 @@ class Receive(Node):
         obj = _target(agent)
         if obj is not None and obj.service_point is not None:
             obj.service_point.cancel(agent.id)
+
+
+class SetTarget(Node):
+    """Point the agent at a specific pre-resolved object for the following
+    leaves. Used by multi-step plans to switch targets between steps."""
+
+    name = "SetTarget"
+
+    def __init__(self, obj) -> None:
+        self.obj = obj
+
+    def tick(self, agent: "Agent", ctx: "SimContext") -> Status:
+        agent.blackboard["target"] = self.obj
+        return Status.SUCCESS
+
+
+class ReceiveItem(Node):
+    """Like Receive, but the order yields a carried *item* into the agent's
+    inventory rather than satisfying a need directly (the need is satisfied
+    later, when the item is consumed)."""
+
+    name = "Receive"
+
+    def __init__(self, item: str) -> None:
+        self.item = item
+
+    def tick(self, agent: "Agent", ctx: "SimContext") -> Status:
+        obj = _target(agent)
+        if obj is None or obj.service_point is None:
+            return Status.FAILURE
+        sp = obj.service_point
+        agent.locomotor.set_goal(sp.pickup)
+        if not (agent.locomotor.at_goal and sp.is_ready(agent.id)):
+            return Status.RUNNING
+        sp.collect(agent.id)
+        agent.inventory.add(self.item)
+        return Status.SUCCESS
+
+    def abort(self, agent: "Agent", ctx: "SimContext") -> None:
+        obj = _target(agent)
+        if obj is not None and obj.service_point is not None:
+            obj.service_point.cancel(agent.id)
+
+
+class ConsumeItem(Node):
+    """Occupy the target (a seat) and consume a carried item over time, draining
+    the satisfied need. Fails if the item isn't in hand."""
+
+    name = "Consume"
+
+    def __init__(self, item: str, need: str, amount: float, ticks: int = 15) -> None:
+        self.item = item
+        self.need = need
+        self.amount = amount
+        self.ticks = ticks
+
+    def tick(self, agent: "Agent", ctx: "SimContext") -> Status:
+        obj = _target(agent)
+        if obj is None:
+            return Status.FAILURE
+        bb = agent.blackboard
+        if "consume_left" not in bb:
+            if not agent.inventory.has(self.item):
+                return Status.FAILURE
+            if not obj.occupy(agent.id):
+                return Status.FAILURE
+            agent.inventory.remove(self.item)
+            bb["consume_left"] = self.ticks
+            bb["consume_per"] = self.amount / self.ticks
+            bb[ATOMIC] = True  # finish the drink before reconsidering motives (§2B)
+        bb["consume_left"] -= 1
+        needs = agent.drives.needs
+        needs[self.need] = max(0.0, needs[self.need] - bb["consume_per"])
+        if bb["consume_left"] <= 0:
+            for key in ("consume_left", "consume_per", ATOMIC):
+                bb.pop(key, None)
+            return Status.SUCCESS
+        return Status.RUNNING
+
+    def abort(self, agent: "Agent", ctx: "SimContext") -> None:
+        for key in ("consume_left", "consume_per", ATOMIC):
+            agent.blackboard.pop(key, None)
+
+
+class Enter(Node):
+    """Step through a portal: on arrival, teleport to its linked target (the
+    connected venue) and clear the goal so the next step plans afresh."""
+
+    name = "Enter"
+
+    def tick(self, agent: "Agent", ctx: "SimContext") -> Status:
+        obj = _target(agent)
+        if obj is None or obj.portal is None:
+            return Status.FAILURE
+        agent.position = obj.portal.target
+        agent.locomotor.clear_goal()
+        return Status.SUCCESS
 
 
 def interaction_tree() -> Sequence:

@@ -9,7 +9,7 @@ The Controller tier (the brain) lives in `simsy/ai/controller.py`.
 """
 
 from .representation import NavShape, RenderShape, Transform
-from .state import Blackboard, Drives, Locomotor, Role
+from .state import Blackboard, Drives, GroupMember, Inventory, Locomotor, Mood, Role
 
 __all__ = [
     "Transform",
@@ -19,4 +19,7 @@ __all__ = [
     "Drives",
     "Locomotor",
     "Role",
+    "Inventory",
+    "GroupMember",
+    "Mood",
 ]

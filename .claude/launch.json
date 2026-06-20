@@ -6,6 +6,18 @@
       "runtimeExecutable": "uv",
       "runtimeArgs": ["run", "python", "-m", "simsy.server"],
       "port": 8000
+    },
+    {
+      "name": "simsy-plan-viewer",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "python", "-m", "simsy.server", "micro.plan"],
+      "port": 8000
+    },
+    {
+      "name": "simsy-cafe-viewer",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "python", "-m", "simsy.server", "cafe"],
+      "port": 8000
     }
   ]
 }

@@ -19,7 +19,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from . import utility
-from .behavior_tree import Sequence, Status, tree_for
+from .behavior_tree import ATOMIC, Sequence, Status, tree_for
+from .plan import build_plan_tree
 
 if TYPE_CHECKING:
     from ..agents.agent import Agent
@@ -35,6 +36,10 @@ class Controller:
         self.ucfg = utility_cfg
         self.active_motive: str | None = None
         self._tree: Sequence | None = None
+        # The object that anchors the active motive's score (for hysteresis).
+        # Distinct from blackboard["target"], which a multi-step plan reassigns
+        # per step — scoring must stay anchored to where the motive came from.
+        self._motive_obj = None
 
     # --- cognition (staggered): pick / re-pick a motive -------------------
     def think(self, agent: "Agent", world: "WorldRegistry", ctx: "SimContext") -> None:
@@ -42,27 +47,35 @@ class Controller:
         if cand is None or cand.score < self.ucfg.idle_threshold:
             return  # nothing worth doing -> stay idle
         if self.active_motive is None:
-            self._adopt(agent, cand)
+            self._adopt(agent, world, cand)
             return
+        if agent.blackboard.get(ATOMIC):
+            return  # mid atomic interaction (§2B): finish before reconsidering
         if cand.need == self.active_motive:
             return  # stay committed; intra-motive object choice is free
-        current = self._current_motive_score(agent, world)
+        current = self._current_motive_score(agent)
         if cand.score > current * self.ucfg.hysteresis:
             self._abort_current(agent, ctx)
-            self._adopt(agent, cand)
+            self._adopt(agent, world, cand)
 
-    def _current_motive_score(self, agent: "Agent", world: "WorldRegistry") -> float:
-        target = agent.blackboard.get("target")
-        if self.active_motive is None or target is None:
+    def _current_motive_score(self, agent: "Agent") -> float:
+        if self.active_motive is None or self._motive_obj is None:
             return 0.0
         return utility.score(
             agent.drives.needs[self.active_motive],
-            target.advertised_amount(self.active_motive),
+            self._motive_obj.advertised_amount(self.active_motive),
             self.ucfg.pressure_exponent,
         )
 
-    def _adopt(self, agent: "Agent", cand: utility.Candidate) -> None:
+    def _adopt(self, agent: "Agent", world: "WorldRegistry", cand: utility.Candidate) -> None:
         self.active_motive = cand.need
+        self._motive_obj = cand.obj
+        recipe = agent.recipes.get(cand.need)
+        if recipe is not None:
+            tree = build_plan_tree(world, recipe, cand.need, agent)
+            if tree is not None:
+                self._tree = tree  # SetTarget leaves manage blackboard["target"]
+                return
         agent.blackboard["target"] = cand.obj
         self._tree = tree_for(cand.obj)
 
@@ -76,6 +89,7 @@ class Controller:
 
     def _clear(self, agent: "Agent") -> None:
         self.active_motive = None
+        self._motive_obj = None
         self._tree = None
         agent.blackboard.pop("target", None)
         agent.locomotor.clear_goal()
@@ -95,3 +109,20 @@ class Controller:
             return None
         idx = min(self._tree._index, len(self._tree.children) - 1)
         return self._tree.children[idx].name
+
+    def plan_view(self) -> dict | None:
+        """A nested view of the active tree for the viewer: each node's name,
+        its children, and which child is currently executing (`active_index`).
+        Following `active_index` down marks the running path."""
+        if self._tree is None:
+            return None
+        return _tree_view(self._tree)
+
+
+def _tree_view(node) -> dict:
+    view: dict = {"name": node.name}
+    children = getattr(node, "children", None)
+    if children:
+        view["active_index"] = min(getattr(node, "_index", 0), len(children) - 1)
+        view["children"] = [_tree_view(c) for c in children]
+    return view

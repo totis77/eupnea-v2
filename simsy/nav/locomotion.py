@@ -39,11 +39,13 @@ class Locomotion:
         self.neighbor_dist = orca.neighbor_distance
         self.arrive_eps = loco.arrive_eps
         self.waypoint_eps = loco.waypoint_eps
+        self.cohesion = loco.group_cohesion
 
     def update(self, agents: list["Agent"], ctx: "SimContext") -> None:
         ordered = sorted(agents, key=lambda a: a.id)
         pos = {a.id: a.position for a in ordered}
         vel = {a.id: a.locomotor.vel for a in ordered}  # last tick's velocities
+        centroids = self._group_centroids(ordered, pos)
 
         # Pass 1: ORCA velocity for each moving agent (read-only snapshot).
         for a in ordered:
@@ -55,7 +57,7 @@ class Locomotion:
                 lo.path = find_path(self.grid, a.position, lo.goal) or [lo.goal]
                 lo.path_idx = 0
             self._advance_waypoint(a)
-            pref = self._seek(a)
+            pref = self._apply_cohesion(a, self._seek(a), centroids, pos)
             neighbors = self._neighbors(a, ordered, pos, vel)
             v = orca_velocity(
                 Vec2(*pos[a.id]), Vec2(*vel[a.id]), a.radius,
@@ -78,6 +80,36 @@ class Locomotion:
                 lo.at_goal = True
                 lo.vel = (0.0, 0.0)
                 lo.path = None
+
+    # --- group cohesion ---------------------------------------------------
+    def _group_centroids(self, ordered, pos):
+        groups: dict[str, list] = {}
+        for a in ordered:
+            gm = a.group_member
+            if gm is not None:
+                groups.setdefault(gm.group_id, []).append(pos[a.id])
+        return {
+            g: (sum(p[0] for p in ps) / len(ps), sum(p[1] for p in ps) / len(ps))
+            for g, ps in groups.items()
+        }
+
+    def _apply_cohesion(self, a, pref, centroids, pos):
+        """Blend a pull toward the group's centroid into the preferred velocity
+        so members travel together; clamp the result to the agent's speed."""
+        gm = a.group_member
+        if gm is None or self.cohesion <= 0.0:
+            return pref
+        c = centroids.get(gm.group_id)
+        if c is None:
+            return pref
+        ax, ay = pos[a.id]
+        vx = pref[0] + (c[0] - ax) * self.cohesion
+        vy = pref[1] + (c[1] - ay) * self.cohesion
+        m = math.hypot(vx, vy)
+        speed = a.locomotor.speed
+        if m > speed:
+            vx, vy = vx / m * speed, vy / m * speed
+        return (vx, vy)
 
     def _resolve(self, old, new):
         """Block movement into obstacles; slide along the unobstructed axis."""

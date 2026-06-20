@@ -128,16 +128,14 @@ class ServicePoint:
         self._pending: list[str] = []   # ordered, awaiting a server (FIFO)
         self._in_progress: str | None = None  # the order being brewed now
         self._ready: set[str] = set()       # brewed, awaiting collection
+        self._active: set[str] = set()      # all guests with an outstanding order
 
     # --- guest side -------------------------------------------------------
     def place_order(self, guest_id: str) -> None:
         """Enqueue an order. Idempotent; ignores guests already in the system."""
-        if (
-            guest_id != self._in_progress
-            and guest_id not in self._pending
-            and guest_id not in self._ready
-        ):
+        if guest_id not in self._active:
             self._pending.append(guest_id)
+            self._active.add(guest_id)
 
     def is_ready(self, guest_id: str) -> bool:
         return guest_id in self._ready
@@ -146,6 +144,7 @@ class ServicePoint:
         """Take a ready order. True if there was one to collect."""
         if guest_id in self._ready:
             self._ready.discard(guest_id)
+            self._active.discard(guest_id)
             return True
         return False
 
@@ -156,6 +155,7 @@ class ServicePoint:
         if self._in_progress == guest_id:
             self._in_progress = None
         self._ready.discard(guest_id)
+        self._active.discard(guest_id)
 
     # --- server side ------------------------------------------------------
     def next_order(self) -> str | None:
@@ -169,10 +169,22 @@ class ServicePoint:
             self._in_progress = guest_id
 
     def mark_ready(self, guest_id: str) -> None:
-        """Server finishes; the order moves to the pickup counter."""
+        """Server finishes; the order moves to the pickup counter — unless the
+        guest gave up and left (cancelled), in which case the drink is discarded."""
         if self._in_progress == guest_id:
             self._in_progress = None
-        self._ready.add(guest_id)
+        if guest_id in self._active:  # still waiting → hand it over; else discard
+            self._ready.add(guest_id)
+
+
+class Portal:
+    """A link to another place (architecture doc §6D). Reaching a portal moves
+    the agent to `target` — the connected portal in another venue/room. The two
+    sides need not share a walkable path, so this is how an agent crosses between
+    venues that A* can't route between directly."""
+
+    def __init__(self, target: tuple[float, float]) -> None:
+        self.target = target
 
 
 class SmartObject:
@@ -185,6 +197,7 @@ class SmartObject:
         slots: int = 1,
         interaction_ticks: int = 20,
         despawns: bool = False,
+        tags: set[str] | None = None,
     ) -> None:
         self.entity = Entity(
             obj_id,
@@ -193,11 +206,15 @@ class SmartObject:
             RenderShape(shape="box"),
         )
         self.kind = kind
+        # Free-form capability tags multi-step plans locate objects by
+        # (e.g. "sells:coffee", "seat"); distinct from need-Affordances.
+        self.tags = set(tags) if tags else set()
         # World-side Capability components.
         self.affordances = {a.need: a for a in affordances}
         self.slot_set = self.entity.add(SlotSet(slots))
         self.queue: Queue | None = None  # opt-in via enable_queue() for contended objects
         self.service_point: ServicePoint | None = None  # opt-in via enable_service() for staffed objects
+        self.portal: Portal | None = None  # opt-in via enable_portal() for cross-venue links
         self.interaction_ticks = interaction_ticks
         self.despawns = despawns  # reaching this object removes the agent (an exit)
 
@@ -228,6 +245,11 @@ class SmartObject:
         pickup = (px + pickup_offset[0], py + pickup_offset[1])
         self.service_point = self.entity.add(ServicePoint(pickup))
         return self.service_point
+
+    def enable_portal(self, target: tuple[float, float]) -> "Portal":
+        """Link this object to `target` (the connected portal's position)."""
+        self.portal = self.entity.add(Portal(target))
+        return self.portal
 
     # --- pose accessors (single source of truth = the entity) -------------
     @property

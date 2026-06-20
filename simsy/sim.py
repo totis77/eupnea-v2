@@ -44,6 +44,7 @@ class Simulation:
         ordered = sorted(self.agents, key=lambda a: a.id)  # deterministic order
         for agent in ordered:
             agent.update_needs(ctx)
+        self._update_moods(ordered)
         self.ctx.events.drain()
         for agent in ordered:
             if agent.should_think(ctx):
@@ -55,6 +56,26 @@ class Simulation:
         if self.spawner is not None:
             self.spawner.update(self.agents, ctx)
         ctx.tick += 1
+
+    def _update_moods(self, ordered: list[Agent]) -> None:
+        """Affect system: waiting in a queue builds stress (eases otherwise), and
+        stress makes an agent impatient — its Leave drive grows faster."""
+        cfg = self.config.mood
+        dt = self.ctx.dt
+        for a in ordered:
+            mood = a.mood
+            if mood is None:
+                continue
+            target = a.blackboard.get("target")
+            waiting = (
+                target is not None
+                and getattr(target, "queue", None) is not None
+                and a.id in target.queue
+            )
+            mood.adjust(cfg.queue_stress_per_sec * dt if waiting else -cfg.relief_per_sec * dt)
+            needs = a.drives.needs
+            if "Leave" in needs:
+                needs["Leave"] = min(100.0, needs["Leave"] + cfg.impatience * mood.stress * dt)
 
     def _despawn_arrivals(self) -> None:
         """Remove agents that have reached an exit object (releasing its slot)."""
@@ -86,6 +107,9 @@ class Simulation:
             "score": round(motive_score, 3),
             "needs": {k: round(v, 2) for k, v in sorted(a.drives.needs.items())},
             "path": [(round(x, 2), round(y, 2)) for x, y in (a.locomotor.path or [])],
+            "carrying": sorted(a.inventory.items),
+            "plan": a.plan_view,
+            "stress": round(a.mood.stress, 1) if a.mood is not None else None,
         }
 
     def snapshot(self) -> dict:

@@ -28,6 +28,11 @@ class WorldRegistry:
         # Sorted by id for deterministic iteration order.
         return [self._objects[k] for k in sorted(self._objects)]
 
+    def by_tag(self, tag: str) -> list[SmartObject]:
+        """All objects carrying `tag`, deterministically ordered by id. Used by
+        multi-step plans to locate the object for each step."""
+        return [obj for obj in self.all() if tag in obj.tags]
+
     def query(self, need: str, *, only_available: bool = True) -> list[SmartObject]:
         """All objects advertising `need`, deterministically ordered by id.
 

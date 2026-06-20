@@ -11,7 +11,7 @@ capability components (`Affordance`, `SlotSet`) live with the smart object.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 class Blackboard(dict):
@@ -74,3 +74,40 @@ class Role:
     systems/queries use to tell staff from patrons."""
 
     name: str
+
+
+@dataclass
+class Inventory:
+    """What an agent is carrying. Multi-step plans move items between objects —
+    e.g. a coffee acquired at the counter and consumed at a seat."""
+
+    items: set[str] = field(default_factory=set)
+
+    def add(self, item: str) -> None:
+        self.items.add(item)
+
+    def remove(self, item: str) -> None:
+        self.items.discard(item)
+
+    def has(self, item: str) -> bool:
+        return item in self.items
+
+
+@dataclass
+class GroupMember:
+    """Marks an agent as part of a group (`group_id`). The Locomotion system
+    steers members toward their group's centroid so they travel together."""
+
+    group_id: str
+
+
+@dataclass
+class Mood:
+    """Lightweight affect (0..100 stress). Rises while waiting in a queue, eases
+    when idle/satisfied; the higher it is, the more impatient the agent (its
+    Leave drive grows faster). Modulates behaviour without a new controller."""
+
+    stress: float = 0.0
+
+    def adjust(self, delta: float) -> None:
+        self.stress = max(0.0, min(100.0, self.stress + delta))

@@ -50,6 +50,10 @@ class FSM:
     def active_node(self) -> str | None:
         return self.state
 
+    def plan_view(self) -> dict:
+        """One-node view (the current state) so the viewer renders staff too."""
+        return {"name": "fsm", "active_index": 0, "children": [{"name": self.state}]}
+
 
 def serve_fsm(brew_ticks: int) -> FSM:
     """A server brain: brew the station's orders one at a time. The agent's

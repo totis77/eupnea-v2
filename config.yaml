@@ -26,6 +26,7 @@ utility:
 locomotion:
   arrive_eps: 0.35         # final-goal arrival distance
   waypoint_eps: 0.6        # advance to next path waypoint within this distance
+  group_cohesion: 0.6      # how strongly group members steer toward their centroid
 
 orca:
   time_horizon: 2.0        # seconds of look-ahead for collision avoidance
@@ -45,3 +46,8 @@ server:
   http_port: 8000
   ws_port: 8765
   snapshot_hz: 10.0        # broadcast rate; decoupled from tick_rate_hz to save bandwidth
+
+mood:                      # affect: stress from queue waiting -> impatience
+  queue_stress_per_sec: 15.0  # stress gained per second waiting in a queue
+  relief_per_sec: 8.0         # stress shed per second when not waiting
+  impatience: 0.05            # Leave drive added per (stress x second)

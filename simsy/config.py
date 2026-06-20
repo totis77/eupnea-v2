@@ -52,6 +52,7 @@ class UtilityCfg:
 class LocomotionCfg:
     arrive_eps: float = 0.35
     waypoint_eps: float = 0.6
+    group_cohesion: float = 0.6  # how strongly group members steer toward their centroid
 
 
 @dataclass
@@ -86,6 +87,13 @@ class ServerCfg:
 
 
 @dataclass
+class MoodCfg:
+    queue_stress_per_sec: float = 15.0  # stress gained per second waiting in a queue
+    relief_per_sec: float = 8.0         # stress shed per second when not waiting
+    impatience: float = 0.05            # Leave drive added per (stress × second)
+
+
+@dataclass
 class Config:
     simulation: SimulationCfg = field(default_factory=SimulationCfg)
     world: WorldCfg = field(default_factory=WorldCfg)
@@ -96,6 +104,7 @@ class Config:
     population: PopulationCfg = field(default_factory=PopulationCfg)
     archetype: ArchetypeCfg = field(default_factory=ArchetypeCfg)
     server: ServerCfg = field(default_factory=ServerCfg)
+    mood: MoodCfg = field(default_factory=MoodCfg)
 
 
 DEFAULT_PATH = pathlib.Path(__file__).resolve().parent.parent / "config.yaml"
@@ -125,4 +134,5 @@ def load_config(path: str | pathlib.Path | None = None) -> Config:
         population=_section(PopulationCfg, data.get("population")),
         archetype=_section(ArchetypeCfg, data.get("archetype")),
         server=_section(ServerCfg, data.get("server")),
+        mood=_section(MoodCfg, data.get("mood")),
     )
