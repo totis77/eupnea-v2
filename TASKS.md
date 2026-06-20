@@ -203,7 +203,10 @@ visually, saves it back, and runs it — driving the same engine. Separate
 - [x] 4C **Property panel.** The inspector is editable: id / kind / pos / slots /
       tags / affordances, and toggles for queue · service · portal (+ target) ·
       despawns. Edits update the scene dict live and re-render (focus preserved).
-- [ ] 4D **Walls + spawner/entrance** editing (draw/resize wall rects, move entrance).
+- [x] 4D **Walls + spawner/entrance** editing. Unified selection model
+      (object · wall · entrance). "+ wall" mode draws a rect by dragging; a
+      selected wall can be moved, corner-resized (handle), deleted, or edited via
+      a coords inspector; the entrance is a draggable marker with an x,y inspector.
 - [x] 4E **Run from the editor.** Server `POST /run` builds a Simulation from the
       posted scene into a swappable `_sim`; the editor's "Run" button posts the
       current (unsaved) scene and opens the live viewer streaming it; viewer HUD

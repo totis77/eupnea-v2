@@ -41,6 +41,7 @@
     <label style="color:var(--muted);font-size:12px">scene</label>
     <select id="project"></select>
     <button id="add">+ object</button>
+    <button id="wall">+ wall</button>
     <button id="del">delete</button>
     <div class="spacer"></div>
     <span id="status"></span>
@@ -55,7 +56,7 @@
 <script>
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
-let scene = null, project = null, selected = null, drag = null;
+let scene = null, project = null, sel = null, drag = null, draw = null, mode = "select";
 
 function dpr(){ return devicePixelRatio || 1; }
 function resize(){ canvas.width = canvas.clientWidth*dpr(); canvas.height = canvas.clientHeight*dpr(); render(); }
@@ -86,7 +87,8 @@ async function loadScene(name){
   project = name;
   scene = await (await fetch(`/scene/${name}`)).json();
   scene.objects = scene.objects || [];
-  selected = null; updateInspect(); status(`loaded ${name}`);
+  scene.walls = scene.walls || [];
+  sel = null; updateInspect(); status(`loaded ${name}`);
   render();
 }
 async function save(){
@@ -99,22 +101,32 @@ async function save(){
 function status(t){ document.getElementById("status").textContent = t; }
 
 // ---- rendering -----------------------------------------------------------
+function wallRect(w){ // screen rect from a wall, tolerant of inverted coords
+  const x0=Math.min(w[0],w[2]), x1=Math.max(w[0],w[2]), y0=Math.min(w[1],w[3]), y1=Math.max(w[1],w[3]);
+  return { sx:wx(x0), sy:wy(y1), sw:(x1-x0)*view().s, sh:(y1-y0)*view().s };
+}
 function render(){
   if (!scene) return;
   ctx.clearRect(0,0,canvas.width,canvas.height);
-  // walls
-  for (const w of (scene.walls||[])){
-    const [x0,y0,x1,y1]=w;
-    ctx.fillStyle="#222a35"; ctx.strokeStyle="#39424f"; ctx.lineWidth=1;
-    const sx=wx(x0), sy=wy(y1), sw=(x1-x0)*view().s, sh=(y1-y0)*view().s;
-    ctx.fillRect(sx,sy,sw,sh); ctx.strokeRect(sx,sy,sw,sh);
+  // walls (selected one shows a resize handle at its far corner)
+  (scene.walls||[]).forEach((w,i)=>{
+    const {sx,sy,sw,sh}=wallRect(w), on = sel&&sel.t==="wall"&&sel.i===i;
+    ctx.fillStyle="#222a35"; ctx.fillRect(sx,sy,sw,sh);
+    ctx.lineWidth=on?2.5:1; ctx.strokeStyle=on?getCss("--sel"):"#39424f"; ctx.strokeRect(sx,sy,sw,sh);
+    if (on){ const hx=wx(w[2]), hy=wy(w[3]); ctx.fillStyle=getCss("--sel"); ctx.fillRect(hx-5*dpr(),hy-5*dpr(),10*dpr(),10*dpr()); }
+  });
+  // wall-draw preview
+  if (draw){
+    const {sx,sy,sw,sh}=wallRect([draw.x0,draw.y0,draw.x1,draw.y1]);
+    ctx.strokeStyle=getCss("--sel"); ctx.setLineDash([5*dpr(),4*dpr()]); ctx.lineWidth=1.5;
+    ctx.strokeRect(sx,sy,sw,sh); ctx.setLineDash([]);
   }
   // entrance (spawner)
   if (scene.spawner && scene.spawner.entrance){
-    const [ex,ey]=scene.spawner.entrance;
-    ctx.fillStyle="#1f6feb"; ctx.beginPath(); ctx.arc(wx(ex),wy(ey),6*dpr(),0,7); ctx.fill();
+    const [ex,ey]=scene.spawner.entrance, on = sel&&sel.t==="entrance";
+    ctx.fillStyle=on?getCss("--sel"):"#1f6feb"; ctx.beginPath(); ctx.arc(wx(ex),wy(ey),7*dpr(),0,7); ctx.fill();
     ctx.fillStyle="#8b949e"; ctx.font=`${11*dpr()}px ui-sans-serif`; ctx.textAlign="center";
-    ctx.fillText("entrance", wx(ex), wy(ey)+18*dpr());
+    ctx.fillText("entrance", wx(ex), wy(ey)+19*dpr());
   }
   // fixed agents (staff)
   for (const a of (scene.agents||[])){
@@ -124,51 +136,98 @@ function render(){
   }
   // objects
   for (const o of scene.objects){
-    const cx=wx(o.pos[0]), cy=wy(o.pos[1]), w=92*dpr(), h=42*dpr();
+    const cx=wx(o.pos[0]), cy=wy(o.pos[1]), w=92*dpr(), h=42*dpr(), on = sel&&sel.t==="object"&&sel.o===o;
     ctx.beginPath(); ctx.roundRect(cx-w/2,cy-h/2,w,h,7*dpr());
     ctx.fillStyle="#1b2230"; ctx.fill();
-    ctx.lineWidth = (o===selected?2.5:1.5); ctx.strokeStyle = (o===selected?getCss("--sel"):getCss("--line")); ctx.stroke();
+    ctx.lineWidth=on?2.5:1.5; ctx.strokeStyle=on?getCss("--sel"):getCss("--line"); ctx.stroke();
     ctx.fillStyle=getCss("--ink"); ctx.textAlign="center"; ctx.font=`${12*dpr()}px ui-sans-serif`;
     ctx.fillText(o.kind||o.id, cx, cy-3*dpr());
     ctx.fillStyle=getCss("--muted"); ctx.font=`${9*dpr()}px ui-sans-serif`;
-    const tags = (o.tags||[]).join(",");
+    const tags=(o.tags||[]).join(",");
     ctx.fillText(`${o.id}${o.slots?` ·${o.slots}`:""}${tags?` ·${tags}`:""}`, cx, cy+9*dpr());
   }
 }
 function getCss(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
 
-// ---- selection / drag ----------------------------------------------------
+// ---- selection / drag (objects · walls · entrance) -----------------------
+function evpos(e){ const r=canvas.getBoundingClientRect(); return [(e.clientX-r.left)*dpr(), (e.clientY-r.top)*dpr()]; }
 function hit(px,py){
   for (let i=scene.objects.length-1;i>=0;i--){
-    const o=scene.objects[i], cx=wx(o.pos[0]), cy=wy(o.pos[1]), w=92*dpr(), h=42*dpr();
-    if (Math.abs(px-cx)<=w/2 && Math.abs(py-cy)<=h/2) return o;
+    const o=scene.objects[i];
+    if (Math.abs(px-wx(o.pos[0]))<=46*dpr() && Math.abs(py-wy(o.pos[1]))<=21*dpr()) return {t:"object", o};
+  }
+  for (let i=(scene.walls||[]).length-1;i>=0;i--){
+    const {sx,sy,sw,sh}=wallRect(scene.walls[i]);
+    if (px>=sx&&px<=sx+sw&&py>=sy&&py<=sy+sh) return {t:"wall", i};
+  }
+  if (scene.spawner && scene.spawner.entrance){
+    const [ex,ey]=scene.spawner.entrance;
+    if (Math.hypot(px-wx(ex),py-wy(ey))<=11*dpr()) return {t:"entrance"};
   }
   return null;
 }
+function onHandle(px,py){ // cursor over the selected wall's resize handle?
+  if (!sel||sel.t!=="wall") return false;
+  const w=scene.walls[sel.i];
+  return Math.abs(px-wx(w[2]))<=7*dpr() && Math.abs(py-wy(w[3]))<=7*dpr();
+}
 canvas.addEventListener("mousedown", e=>{
-  const r=canvas.getBoundingClientRect(), px=(e.clientX-r.left)*dpr(), py=(e.clientY-r.top)*dpr();
-  selected = hit(px,py);
-  if (selected) drag = { dx: px-wx(selected.pos[0]), dy: py-wy(selected.pos[1]) };
+  const [px,py]=evpos(e);
+  if (mode==="wall"){ const x=+ux(px).toFixed(2), y=+uy(py).toFixed(2); draw={x0:x,y0:y,x1:x,y1:y}; return; }
+  if (onHandle(px,py)){ drag={resize:true}; return; }
+  sel = hit(px,py);
+  if (sel){
+    if (sel.t==="object") drag={dx:px-wx(sel.o.pos[0]), dy:py-wy(sel.o.pos[1])};
+    else if (sel.t==="entrance"){ const en=scene.spawner.entrance; drag={dx:px-wx(en[0]), dy:py-wy(en[1])}; }
+    else if (sel.t==="wall") drag={px:ux(px), py:uy(py)};  // for move delta
+  }
   updateInspect(); render();
 });
 canvas.addEventListener("mousemove", e=>{
-  if (!drag||!selected) return;
-  const r=canvas.getBoundingClientRect(), px=(e.clientX-r.left)*dpr(), py=(e.clientY-r.top)*dpr();
-  selected.pos = [ +(ux(px-drag.dx)).toFixed(2), +(uy(py-drag.dy)).toFixed(2) ];
+  const [px,py]=evpos(e);
+  if (draw){ draw.x1=+ux(px).toFixed(2); draw.y1=+uy(py).toFixed(2); render(); return; }
+  if (!drag||!sel) return;
+  if (drag.resize && sel.t==="wall"){ const w=scene.walls[sel.i]; w[2]=+ux(px).toFixed(2); w[3]=+uy(py).toFixed(2); }
+  else if (sel.t==="object") sel.o.pos=[+ux(px-drag.dx).toFixed(2), +uy(py-drag.dy).toFixed(2)];
+  else if (sel.t==="entrance") scene.spawner.entrance=[+ux(px-drag.dx).toFixed(2), +uy(py-drag.dy).toFixed(2)];
+  else if (sel.t==="wall"){
+    const nx=ux(px), ny=uy(py), dx=nx-drag.px, dy=ny-drag.py, w=scene.walls[sel.i];
+    scene.walls[sel.i]=[+(w[0]+dx).toFixed(2), +(w[1]+dy).toFixed(2), +(w[2]+dx).toFixed(2), +(w[3]+dy).toFixed(2)];
+    drag.px=nx; drag.py=ny;
+  }
   updateInspect(); render();
 });
-addEventListener("mouseup", ()=>{ drag=null; });
-addEventListener("keydown", e=>{
-  if ((e.key==="Delete"||e.key==="Backspace") && selected){
-    scene.objects = scene.objects.filter(o=>o!==selected); selected=null; updateInspect(); render();
+addEventListener("mouseup", ()=>{
+  if (draw){
+    const x0=Math.min(draw.x0,draw.x1), x1=Math.max(draw.x0,draw.x1), y0=Math.min(draw.y0,draw.y1), y1=Math.max(draw.y0,draw.y1);
+    if ((x1-x0)>0.3 && (y1-y0)>0.3){ scene.walls.push([x0,y0,x1,y1]); sel={t:"wall", i:scene.walls.length-1}; }
+    draw=null; setMode("select"); updateInspect(); render();
+  } else if (drag && drag.resize && sel && sel.t==="wall"){  // normalize after resize
+    const w=scene.walls[sel.i];
+    scene.walls[sel.i]=[Math.min(w[0],w[2]),Math.min(w[1],w[3]),Math.max(w[0],w[2]),Math.max(w[1],w[3])];
   }
+  drag=null;
+});
+addEventListener("keydown", e=>{
+  if (e.key!=="Delete" && e.key!=="Backspace") return;
+  if (!sel || (document.activeElement && document.activeElement.tagName==="INPUT")) return;
+  if (sel.t==="object") scene.objects=scene.objects.filter(o=>o!==sel.o);
+  else if (sel.t==="wall") scene.walls.splice(sel.i,1);
+  else return;  // entrance can't be deleted
+  sel=null; updateInspect(); render();
 });
 
+const g = id => document.getElementById(id);
 function updateInspect(){
   const el=document.getElementById("inspect");
-  if (!selected){ el.style.display="none"; return; }
+  if (!sel){ el.style.display="none"; return; }
   el.style.display="block";
-  const o=selected;
+  if (sel.t==="object") inspectObject(el, sel.o);
+  else if (sel.t==="wall") inspectWall(el, sel.i);
+  else if (sel.t==="entrance") inspectEntrance(el);
+}
+
+function inspectObject(el, o){
   const aff = Object.entries(o.affordances||{}).map(([k,v])=>`${k}:${v}`).join(", ");
   el.innerHTML = `
     <h3>object</h3>
@@ -182,15 +241,10 @@ function updateInspect(){
     <label class="chk"><input type="checkbox" id="f-service" ${o.service?'checked':''}> service</label>
     <label class="chk"><input type="checkbox" id="f-despawn" ${o.despawns?'checked':''}> despawns (exit)</label>
     <label class="chk"><input type="checkbox" id="f-portal" ${o.portal?'checked':''}> portal</label>
-    <label id="f-portal-row" style="${o.portal?'':'display:none'}">target <span><input id="f-tx" type="number" step="0.5" value="${o.portal?o.portal.target[0]:0}"><input id="f-ty" type="number" step="0.5" value="${o.portal?o.portal.target[1]:0}"></span></label>
-  `;
-  el.querySelectorAll("input").forEach(inp => inp.addEventListener("input", applyInspect));
+    <label id="f-portal-row" style="${o.portal?'':'display:none'}">target <span><input id="f-tx" type="number" step="0.5" value="${o.portal?o.portal.target[0]:0}"><input id="f-ty" type="number" step="0.5" value="${o.portal?o.portal.target[1]:0}"></span></label>`;
+  el.querySelectorAll("input").forEach(inp => inp.addEventListener("input", ()=>applyObject(o)));
 }
-
-// Read the form back into the selected object (no DOM rebuild, to keep focus).
-function applyInspect(){
-  const o=selected; if (!o) return;
-  const g=id=>document.getElementById(id);
+function applyObject(o){
   o.id = g("f-id").value || o.id;
   o.kind = g("f-kind").value;
   o.pos = [ +g("f-px").value, +g("f-py").value ];
@@ -208,6 +262,25 @@ function applyInspect(){
   if (o.portal) o.portal.target = [ +g("f-tx").value, +g("f-ty").value ];
   render();
 }
+function inspectWall(el, i){
+  const w=scene.walls[i];
+  el.innerHTML = `
+    <h3>wall</h3>
+    <label>x0,y0 <span><input id="w-x0" type="number" step="0.5" value="${w[0]}"><input id="w-y0" type="number" step="0.5" value="${w[1]}"></span></label>
+    <label>x1,y1 <span><input id="w-x1" type="number" step="0.5" value="${w[2]}"><input id="w-y1" type="number" step="0.5" value="${w[3]}"></span></label>`;
+  el.querySelectorAll("input").forEach(inp => inp.addEventListener("input", ()=>{
+    scene.walls[i] = [+g("w-x0").value, +g("w-y0").value, +g("w-x1").value, +g("w-y1").value]; render();
+  }));
+}
+function inspectEntrance(el){
+  const en=scene.spawner.entrance;
+  el.innerHTML = `
+    <h3>entrance</h3>
+    <label>x,y <span><input id="e-x" type="number" step="0.5" value="${en[0]}"><input id="e-y" type="number" step="0.5" value="${en[1]}"></span></label>`;
+  el.querySelectorAll("input").forEach(inp => inp.addEventListener("input", ()=>{
+    scene.spawner.entrance = [+g("e-x").value, +g("e-y").value]; render();
+  }));
+}
 
 async function run(){
   status("starting…");
@@ -218,17 +291,27 @@ async function run(){
   else { const e = await res.json().catch(()=>({})); status("run failed: " + (e.error||"")); }
 }
 
+function setMode(m){
+  mode = m;
+  canvas.style.cursor = m==="wall" ? "crosshair" : "default";
+  document.getElementById("wall").style.borderColor = m==="wall" ? getCss("--accent") : "";
+}
 document.getElementById("project").addEventListener("change", e=>loadScene(e.target.value));
 document.getElementById("save").addEventListener("click", save);
 document.getElementById("run").addEventListener("click", run);
+document.getElementById("wall").addEventListener("click", ()=>setMode(mode==="wall"?"select":"wall"));
 document.getElementById("del").addEventListener("click", ()=>{
-  if (selected){ scene.objects=scene.objects.filter(o=>o!==selected); selected=null; updateInspect(); render(); }
+  if (!sel) return;
+  if (sel.t==="object") scene.objects=scene.objects.filter(o=>o!==sel.o);
+  else if (sel.t==="wall") scene.walls.splice(sel.i,1);
+  else return;
+  sel=null; updateInspect(); render();
 });
 document.getElementById("add").addEventListener("click", ()=>{
   const v=view(), cx=(v.minx+v.maxx)/2, cy=(v.miny+v.maxy)/2;
   let n=1; while (scene.objects.some(o=>o.id===`object${n}`)) n++;
   const o={ id:`object${n}`, kind:"Object", pos:[+cx.toFixed(2),+cy.toFixed(2)], slots:1 };
-  scene.objects.push(o); selected=o; updateInspect(); render();
+  scene.objects.push(o); sel={t:"object", o}; updateInspect(); render();
 });
 
 loadScenes().then(resize);
