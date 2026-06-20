@@ -139,15 +139,16 @@ The Web Client renders debug overlays directly from the engine's serialized stat
 
 ## 6. Entity-Component Model (the authoring & runtime substrate)
 
-> **Status: implemented (Phase 1 complete).** `Agent` and `SmartObject` are now
-> entities composed from the components below — Representation (`Transform`/
-> `NavShape`/`RenderShape`), Capability/State (`Drives`, `Locomotor`,
-> `Blackboard`; world-side `Affordance`, `SlotSet`), and a pluggable `Controller`
-> (`Utility→BT`). The refactor was done at **parity** (zero new features; the
-> determinism test still proves bit-identical replay), and components are now
-> independently testable ([tests/test_components.py](../tests/test_components.py)).
-> Still deferred to later phases: walls as `NavShape(static)` entities and
-> systems querying entities by component type (scene-as-data), then GUI authoring.
+> **Status: implemented (Phases 1–3 done).** `Agent` and `SmartObject` are
+> entities composed from the components below — Representation, Capability/State
+> (`Drives`, `Locomotor`, `Blackboard`, `Role`, `Inventory`, `GroupMember`,
+> `Mood`; world-side `Affordance`, `SlotSet`, `Queue`, `ServicePoint`, `Portal`),
+> and a pluggable `Controller` (`Utility→BT`, or an `FSM` for staff). Phase 1 was
+> a parity refactor; Phase 2 added the whiteboard features (queue, staffed service,
+> multi-step recipes, groups, portals, mood), each behind a micro-scene + tests;
+> Phase 3 makes a scene **data** ([scene.yaml](../projects/cafe/scene.yaml) loaded
+> by [simsy/scene.py](../simsy/scene.py)). Next: Phase 4 GUI authoring + scene save.
+> Deferred: walls as `NavShape(static)` entities, autonomous portal routing in A*.
 
 ### A. The Entity
 Following the Unity/Unreal/Godot convention, everything in the world — props,

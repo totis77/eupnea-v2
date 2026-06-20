@@ -23,7 +23,8 @@ config.yaml            # tunable subsystem knobs (NOT scene content)
 simsy/                 # THE ENGINE — reusable AI mechanics; no scene content
   config.py            # typed config + load_config(); defaults live here
   sim.py               # Simulation driver (tick loop + snapshot emitter)
-  project.py           # project loader: build_project(name) → Simulation (engine↔project seam)
+  project.py           # project loader: build_project(name) → Simulation (prefers scene.yaml, else build())
+  scene.py             # scene-as-data loader: YAML scene dict → Simulation (§6G); controller/recipe registries
   run.py               # generic headless runner: `python -m simsy.run [project] [ticks]`
   server.py            # WebSocket + HTTP bridge for the viewer (`python -m simsy.server`)
   core/
@@ -53,12 +54,10 @@ simsy/                 # THE ENGINE — reusable AI mechanics; no scene content
 viewer/index.html      # canvas client: interpolated render + side panel showing each agent's live plan tree (steps→active leaf) + carried items
 projects/              # PROJECTS — self-contained scenarios; own their assets+scene, reference simsy
   coffee_shop/
-    project.py         # build(config, seed, max_population) → Simulation: scene placement + walls + spawner
-    assets.py          # resources: object kinds (espresso/couch/exit) + guest archetype
-  cafe/                # fuller scenario (whiteboard): staffed counter + 2 baristas + seating + toilet, continuous
-    project.py         # scene: counter, baristas, couch/tables/coworking, toilet, exit, spawner
-    assets.py          # counter (queue+service), seating, toilet, guest archetype (coffee recipe), barista factory
-  micro/               # tiny single-feature projects for isolation testing
+    scene.yaml         # DATA scene (§6G): walls, objects (espresso queue/couch/exit), guest archetype, spawner
+  cafe/                # fuller scenario (whiteboard), fully data-driven
+    scene.yaml         # staffed counter + 2 FSM baristas, coffee recipe, seating, toilet, mood, spawner
+  micro/               # tiny single-feature projects for isolation testing (still Python build())
     queue/             # one contended counter + a line (the Queue feature)
     service/           # a staffed counter + barista (ServicePoint + FSM controller)
     plan/              # order coffee → sit & drink it (multi-step recipe + Inventory)
@@ -90,14 +89,15 @@ tests/                 # pytest suite (see below)
   A full object stays a Utility candidate **only if it has a queue**.
 - **Engine vs project boundary:** `simsy/` is reusable *mechanics* (components,
   systems, controllers, the `Simulation` driver). A **project** under
-  [projects/](projects/) is a self-contained scenario that owns its *content*
-  (assets + scene placement) and references the engine — see
-  [projects/coffee_shop/project.py](projects/coffee_shop/project.py). Load one via
-  `simsy.project.build_project(name)`. (Phase 3 turns a project's `build()` into
-  serialized scene *data*; Phase 4 a GUI that edits it.)
+  [projects/](projects/) is a self-contained scenario that owns its *content* and
+  references the engine. A scene is authored as **data** —
+  [projects/coffee_shop/scene.yaml](projects/coffee_shop/scene.yaml), loaded by
+  [simsy/scene.py](simsy/scene.py) (§6G); `build_project(name)` prefers a
+  `scene.yaml`, else falls back to a Python `build()` (the micro feature scenes
+  still use that). Phase 4 adds a GUI that edits the scene data.
 - **Config vs scene boundary:** [config.yaml](config.yaml) holds subsystem *tuning*
-  (ORCA, utility, population, ports…). Scene *content* (which objects/walls exist)
-  lives in a project's `project.py`/`assets.py`, not config.
+  (ORCA, utility, population, ports…). Scene *content* (objects/walls/agents/
+  archetypes/spawner) lives in a project's `scene.yaml`, not config.
 
 ## Commands
 

@@ -165,6 +165,28 @@ scenes expressed as Python `build()` for now (data-driven deferred to Phase 3).
       in the snapshot + viewer (stress bar); wired into the café guests.
       `projects/micro/mood/`.
 
+## Phase 3 — Scene as data
+**Goal:** a scene is a YAML data file loaded by a generic loader into a
+`Simulation`, replacing per-project Python `build()`. Fully data-driven incl.
+controllers + recipes. This file is the DSL/AST the Phase 4 GUI will edit.
+
+- [x] 3A–3C **Loader + schema** ([simsy/scene.py](simsy/scene.py)): `load_scene`
+      / `load_scene_file` build a Simulation from a scene dict — world bounds,
+      walls, objects (affordances/slots/tags + opt-in queue/service/portal),
+      fixed agents/staff with controllers via a named `CONTROLLERS` registry
+      (`serve_fsm` + station wiring), archetypes (needs/growth/recipes/mood),
+      spawner. Recipes are `Step` lists in data.
+- [x] 3D **Convert projects:** `projects/coffee_shop/scene.yaml` and
+      `projects/cafe/scene.yaml` author the scenes as data; `build_project`
+      prefers `scene.yaml` (else falls back to `build()` for the micro scenes).
+      Deleted the now-dead `coffee_shop`/`cafe` `project.py`+`assets.py`. Café is
+      fully data-driven (baristas, recipes, mood). 45/45 green; both scenes load
+      and run live in the viewer.
+- [ ] 3E **Save/serialize** (scene dict → YAML) — deferred to Phase 4: the GUI
+      edits the data dict and writes it back (`yaml.dump`); reconstructing the
+      authoring params from runtime state would be lossy, so save operates on the
+      data, not the live Simulation.
+
 ## Status log
 - _(start)_ — plan created; beginning Task 1.
 - Task 1 done — `NavGrid(inflate=)`; doorway widened to y∈[4,8]; agents cross at

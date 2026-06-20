@@ -1,0 +1,63 @@
+# Café scene (data) — the whiteboard scenario, fully data-driven: staffed
+# counter + 2 FSM baristas, the coffee recipe, varied seating, a toilet, mood.
+name: cafe
+seed: 42
+
+world:
+  bounds: [-24.0, -14.0, 24.0, 14.0]
+  cell_size: 1.0
+
+objects:
+  - id: counter
+    kind: CoffeeCounter
+    pos: [-10.0, 7.0]
+    affordances: { Caffeine: 45.0 }
+    slots: 3
+    tags: [sells:coffee]
+    queue: { direction: [-1.0, 0.0], spacing: 1.5, gap: 2.0 }
+    service: { pickup_offset: [0.0, -4.0] }
+  - id: exit
+    kind: Exit
+    pos: [-20.0, -10.0]
+    affordances: { Leave: 100.0 }
+    slots: 12
+    interaction_ticks: 1
+    despawns: true
+  - id: toilet
+    kind: Toilet
+    pos: [14.0, -9.0]
+    affordances: { Bladder: 100.0 }
+    slots: 2
+    interaction_ticks: 15
+  - { id: couch, kind: Couch, pos: [16.0, 8.0], slots: 5, tags: [seat] }
+  - { id: table1, kind: Table, pos: [-2.0, 1.0], slots: 3, tags: [seat] }
+  - { id: table2, kind: Table, pos: [5.0, 1.0], slots: 3, tags: [seat] }
+  - { id: coworking, kind: CoworkingTable, pos: [2.0, -8.0], slots: 8, tags: [seat] }
+
+# Staff: two baristas serving the counter's ServicePoint, driven by an FSM.
+agents:
+  - id: barista1
+    pos: [-12.0, 8.5]
+    role: barista
+    controller: { type: serve_fsm, brew_ticks: 12, station: counter }
+  - id: barista2
+    pos: [-8.0, 8.5]
+    role: barista
+    controller: { type: serve_fsm, brew_ticks: 12, station: counter }
+
+archetypes:
+  guest:
+    needs: { Caffeine: 60.0, Bladder: 0.0, Leave: 0.0 }
+    growth: { Caffeine: 1.0, Bladder: 1.2, Leave: 0.6 }
+    with_mood: true
+    recipes:
+      Caffeine:
+        - { tag: sells:coffee, action: acquire, item: coffee }
+        - { tag: seat, action: consume, item: coffee, amount: 45.0 }
+
+spawner:
+  archetype: guest
+  entrance: [-20.0, -10.0]
+  max_population: 16
+  interval_ticks: [20, 50]
+  initial: 3

@@ -1,0 +1,48 @@
+# Coffee-shop scene (data). Loaded by simsy.scene; replaces the hand-written
+# build(). Subsystem tuning still comes from config.yaml.
+name: coffee_shop
+seed: 42
+
+world:
+  bounds: [-26.0, -13.0, 26.0, 13.0]
+  cell_size: 1.0
+
+# Dividing wall at x=0 with a doorway gap at y in [4, 8].
+walls:
+  - [-0.6, -13.0, 0.6, 4.0]
+  - [-0.6, 8.0, 0.6, 13.0]
+
+objects:
+  - id: espresso
+    kind: CoffeeCounter
+    pos: [20.0, 0.0]
+    affordances: { Caffeine: 40.0 }
+    slots: 1
+    interaction_ticks: 20
+    queue: { direction: [-1.0, 0.0], spacing: 1.5, gap: 2.0 }
+  - id: couch
+    kind: Chair
+    pos: [-20.0, 0.0]
+    affordances: { Rest: 30.0 }
+    slots: 2
+    interaction_ticks: 15
+  - id: door
+    kind: Exit
+    pos: [-24.0, 0.0]
+    affordances: { Leave: 100.0 }
+    slots: 12
+    interaction_ticks: 1
+    despawns: true
+
+archetypes:
+  guest:
+    needs: { Caffeine: 55.0, Rest: 55.0, Leave: 0.0 }
+    growth: { Caffeine: 4.0, Rest: 3.0, Leave: 2.5 }
+    spread: 12.0
+
+spawner:
+  archetype: guest
+  entrance: [-24.0, 0.0]
+  max_population: 8
+  interval_ticks: [15, 45]
+  initial: 3
