@@ -51,7 +51,7 @@ simsy/                 # THE ENGINE — reusable AI mechanics; no scene content
     astar.py           # deterministic 8-dir A* + LOS path smoothing
     orca.py            # ORCA (RVO2 linear-program port): Vec2, Line, orca_velocity
     locomotion.py      # world-level movement: path following + ORCA + collision resolution
-viewer/index.html      # canvas client: interpolated render + side panel showing each agent's live plan tree (steps→active leaf) + carried items
+viewer/index.html      # canvas client: interpolated render (toggle tethers/paths) + side panel: each agent's live plan tree (steps→active leaf) + carried items + stress
 projects/              # PROJECTS — self-contained scenarios; own their assets+scene, reference simsy
   coffee_shop/
     scene.yaml         # DATA scene (§6G): walls, objects (espresso queue/couch/exit), guest archetype, spawner

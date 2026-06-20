@@ -119,7 +119,7 @@ class Travel(Node):
         obj = _target(agent)
         if obj is None:
             return Status.FAILURE
-        agent.locomotor.set_goal(obj.position)
+        agent.locomotor.set_goal(obj.stand_position(agent.id))
         return Status.SUCCESS if agent.locomotor.at_goal else Status.RUNNING
 
 
@@ -197,7 +197,7 @@ class Receive(Node):
         if obj is None or obj.service_point is None:
             return Status.FAILURE
         sp = obj.service_point
-        agent.locomotor.set_goal(sp.pickup)
+        agent.locomotor.set_goal(sp.pickup_position(agent.id))
         if not (agent.locomotor.at_goal and sp.is_ready(agent.id)):
             return Status.RUNNING
         sp.collect(agent.id)
@@ -242,7 +242,7 @@ class ReceiveItem(Node):
         if obj is None or obj.service_point is None:
             return Status.FAILURE
         sp = obj.service_point
-        agent.locomotor.set_goal(sp.pickup)
+        agent.locomotor.set_goal(sp.pickup_position(agent.id))
         if not (agent.locomotor.at_goal and sp.is_ready(agent.id)):
             return Status.RUNNING
         sp.collect(agent.id)

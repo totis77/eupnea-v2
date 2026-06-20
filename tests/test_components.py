@@ -32,6 +32,16 @@ def test_slotset_tracks_multiple_slots():
     assert slots.is_reserved_by("a") and not slots.is_reserved_by("c")
 
 
+def test_slotset_assigns_distinct_slot_indices_and_recycles():
+    slots = SlotSet(count=3)
+    slots.reserve("a"); slots.reserve("b"); slots.reserve("c")
+    idx = {slots.index_of(x) for x in ("a", "b", "c")}
+    assert idx == {0, 1, 2}, "each occupant gets a distinct slot index (distinct stand position)"
+    slots.release("b")
+    slots.reserve("d")
+    assert slots.index_of("d") == 1, "freed index is recycled"
+
+
 # --- Drives: need growth, clamped, driven by an explicit dt ----------------
 def test_drives_grow_by_rate_times_dt():
     d = Drives(needs={"Caffeine": 50.0}, growth={"Caffeine": 4.0})

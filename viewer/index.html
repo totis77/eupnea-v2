@@ -19,6 +19,9 @@
   #hud { position: absolute; top: 10px; left: 12px; font-variant-numeric: tabular-nums;
     color: var(--muted); pointer-events: none; }
   #hud b { color: var(--ink); }
+  #toggles { margin-left: 10px; pointer-events: auto; }
+  .toggle { margin-left: 8px; cursor: pointer; user-select: none; font-size: 12px; }
+  .toggle input { vertical-align: middle; margin-right: 3px; cursor: pointer; }
   #status { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
     background: var(--warn); margin-right: 6px; vertical-align: middle; }
   #status.on { background: var(--ok); }
@@ -52,7 +55,12 @@
 <div id="app">
   <div id="stage">
     <canvas id="c"></canvas>
-    <div id="hud"><span id="status"></span><b id="conn">connecting…</b> &nbsp; tick <b id="tick">–</b> &nbsp; <b id="time">–</b>s</div>
+    <div id="hud"><span id="status"></span><b id="conn">connecting…</b> &nbsp; tick <b id="tick">–</b> &nbsp; <b id="time">–</b>s
+      <span id="toggles">
+        <label class="toggle"><input type="checkbox" id="tgl-tethers"> tethers</label>
+        <label class="toggle"><input type="checkbox" id="tgl-paths" checked> paths</label>
+      </span>
+    </div>
   </div>
   <aside>
     <h2>Agents — Behavior Trees</h2>
@@ -64,6 +72,9 @@ const WS_URL = "ws://localhost:8765";
 const NEED_COLOR = { Caffeine: getC("--caffeine"), Rest: getC("--rest") };
 function getC(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
 function motiveColor(m){ return NEED_COLOR[m] || getC("--idle"); }
+const _tgl = id => document.getElementById(id);
+function showTethers(){ return _tgl("tgl-tethers").checked; }
+function showPaths(){ return _tgl("tgl-paths").checked; }
 
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
@@ -118,14 +129,14 @@ function draw(){
   drawGrid();
   for (const w of (cur.obstacles || [])) drawObstacle(w);
 
-  // planned A* paths, drawn faintly under everything
-  for (const a of cur.agents) drawPath(a);
+  // planned A* paths, drawn faintly under everything (toggleable)
+  if (showPaths()) for (const a of cur.agents) drawPath(a);
 
   const objCenters = {};
   for (const o of cur.objects){ objCenters[o.id] = [wx(o.pos[0]), wy(o.pos[1])]; drawObject(o); }
 
-  // tethers (agent -> reserved/occupied object), drawn under agents
-  for (const a of cur.agents){
+  // tethers (agent -> reserved/occupied object), drawn under agents (toggleable)
+  if (showTethers()) for (const a of cur.agents){
     if (!a.target || !objCenters[a.target]) continue;
     const [ax, ay] = agentPos(a, t).map((v, i) => i === 0 ? wx(v) : wy(v));
     const [ox, oy] = objCenters[a.target];

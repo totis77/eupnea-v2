@@ -14,10 +14,22 @@ keeps the interaction API the BT leaves and utility scorer call.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from ..components import NavShape, RenderShape, Transform
 from .entity import Entity
+
+
+def _ring_point(center: tuple[float, float], i: int, n: int) -> tuple[float, float]:
+    """A point on a small ring around `center` for occupant/slot `i` of `n`, so
+    several agents at one object stand at distinct, deterministic spots instead
+    of stacking on the object's centre."""
+    if n <= 1:
+        return center
+    r = max(1.2, 0.22 * n)
+    a = 2.0 * math.pi * i / n
+    return (center[0] + r * math.cos(a), center[1] + r * math.sin(a))
 
 
 @dataclass
@@ -41,6 +53,8 @@ class SlotSet:
         self._reserved: dict[str, bool] = {}
         # agent_ids currently occupying a slot.
         self._occupants: set[str] = set()
+        # agent_id -> slot index (0..count-1), so each gets a distinct position.
+        self._index: dict[str, int] = {}
 
     @property
     def free(self) -> int:
@@ -49,6 +63,9 @@ class SlotSet:
     def is_reserved_by(self, agent_id: str) -> bool:
         return agent_id in self._reserved
 
+    def index_of(self, agent_id: str) -> int | None:
+        return self._index.get(agent_id)
+
     def reserve(self, agent_id: str) -> bool:
         """Claim a slot before travelling. Idempotent for the same agent."""
         if agent_id in self._reserved:
@@ -56,6 +73,8 @@ class SlotSet:
         if self.free <= 0:
             return False
         self._reserved[agent_id] = True
+        used = set(self._index.values())
+        self._index[agent_id] = next(i for i in range(self.count) if i not in used)
         return True
 
     def occupy(self, agent_id: str) -> bool:
@@ -69,6 +88,7 @@ class SlotSet:
         """Free the slot. Safe to call from OnAbort or on normal completion."""
         self._reserved.pop(agent_id, None)
         self._occupants.discard(agent_id)
+        self._index.pop(agent_id, None)
 
 
 class Queue:
@@ -123,12 +143,15 @@ class ServicePoint:
     *receiving* (later, at pickup) — the register slot frees as soon as the
     order is in, so the line keeps moving while the server works the backlog."""
 
+    PICKUP_SPOTS = 6  # distinct waiting positions spread around the pickup point
+
     def __init__(self, pickup: tuple[float, float]) -> None:
         self.pickup = pickup        # where guests wait to collect their order
         self._pending: list[str] = []   # ordered, awaiting a server (FIFO)
         self._in_progress: str | None = None  # the order being brewed now
         self._ready: set[str] = set()       # brewed, awaiting collection
         self._active: set[str] = set()      # all guests with an outstanding order
+        self._pickup_idx: dict[str, int] = {}  # guest -> spread spot at pickup
 
     # --- guest side -------------------------------------------------------
     def place_order(self, guest_id: str) -> None:
@@ -136,6 +159,16 @@ class ServicePoint:
         if guest_id not in self._active:
             self._pending.append(guest_id)
             self._active.add(guest_id)
+            used = set(self._pickup_idx.values())
+            free = next((i for i in range(self.PICKUP_SPOTS) if i not in used), 0)
+            self._pickup_idx[guest_id] = free
+
+    def pickup_position(self, guest_id: str) -> tuple[float, float]:
+        """Where this guest waits to collect — a distinct spot near `pickup`."""
+        idx = self._pickup_idx.get(guest_id)
+        if idx is None:
+            return self.pickup
+        return _ring_point(self.pickup, idx, self.PICKUP_SPOTS)
 
     def is_ready(self, guest_id: str) -> bool:
         return guest_id in self._ready
@@ -145,6 +178,7 @@ class ServicePoint:
         if guest_id in self._ready:
             self._ready.discard(guest_id)
             self._active.discard(guest_id)
+            self._pickup_idx.pop(guest_id, None)
             return True
         return False
 
@@ -156,6 +190,7 @@ class ServicePoint:
             self._in_progress = None
         self._ready.discard(guest_id)
         self._active.discard(guest_id)
+        self._pickup_idx.pop(guest_id, None)
 
     # --- server side ------------------------------------------------------
     def next_order(self) -> str | None:
@@ -217,6 +252,14 @@ class SmartObject:
         self.portal: Portal | None = None  # opt-in via enable_portal() for cross-venue links
         self.interaction_ticks = interaction_ticks
         self.despawns = despawns  # reaching this object removes the agent (an exit)
+
+    def stand_position(self, agent_id: str) -> tuple[float, float]:
+        """Where `agent_id` should stand to interact: a distinct per-slot spot so
+        multiple occupants don't pile on the object's centre."""
+        idx = self.slot_set.index_of(agent_id)
+        if idx is None:
+            return self.position
+        return _ring_point(self.position, idx, self.slot_set.count)
 
     def enable_queue(
         self,
