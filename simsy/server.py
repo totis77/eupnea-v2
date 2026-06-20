@@ -16,7 +16,6 @@ interpolates between frames.
 from __future__ import annotations
 
 import asyncio
-import functools
 import http.server
 import json
 import os
@@ -65,12 +64,53 @@ async def _sim_loop() -> None:
         await asyncio.sleep(max(0.0, next_tick - loop.time()))
 
 
+class _Handler(http.server.SimpleHTTPRequestHandler):
+    """Serves the static viewer/editor and a small scene API for the authoring
+    tool: GET /scenes (list), GET /scene/<name> (load), POST /scene/<name> (save)."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=str(VIEWER_DIR), **kwargs)
+
+    def _json(self, code: int, obj) -> None:
+        body = json.dumps(obj).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self) -> None:  # noqa: N802
+        from . import scene
+        if self.path == "/scenes":
+            return self._json(200, {"scenes": scene.list_scenes()})
+        if self.path.startswith("/scene/"):
+            name = self.path[len("/scene/"):]
+            try:
+                return self._json(200, scene.read_scene(name))
+            except FileNotFoundError:
+                return self._json(404, {"error": f"no scene {name!r}"})
+        return super().do_GET()
+
+    def do_POST(self) -> None:  # noqa: N802
+        from . import scene
+        if self.path.startswith("/scene/"):
+            name = self.path[len("/scene/"):]
+            length = int(self.headers.get("Content-Length", 0))
+            try:
+                data = json.loads(self.rfile.read(length))
+                scene.write_scene(name, data)
+                return self._json(200, {"ok": True, "name": name})
+            except Exception as e:  # noqa: BLE001 - report any save failure to the editor
+                return self._json(400, {"error": str(e)})
+        self.send_error(404)
+
+    def log_message(self, *args) -> None:  # quieter logs
+        pass
+
+
 def _serve_http() -> None:
-    handler = functools.partial(
-        http.server.SimpleHTTPRequestHandler, directory=str(VIEWER_DIR)
-    )
-    httpd = http.server.ThreadingHTTPServer(("localhost", HTTP_PORT), handler)
-    print(f"[http] viewer at http://localhost:{HTTP_PORT}")
+    httpd = http.server.ThreadingHTTPServer(("localhost", HTTP_PORT), _Handler)
+    print(f"[http] viewer at http://localhost:{HTTP_PORT}  ·  editor at /editor.html")
     httpd.serve_forever()
 
 

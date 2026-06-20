@@ -12,6 +12,7 @@ actions, controller types). Subsystem *tuning* still comes from `config.yaml`.
 from __future__ import annotations
 
 import pathlib
+import shutil
 from typing import TYPE_CHECKING
 
 import yaml
@@ -24,6 +25,7 @@ from .components import Role
 from .config import load_config
 from .core.context import SimContext
 from .nav.grid import NavGrid
+from .project import PROJECTS_DIR, scene_path
 from .sim import Simulation
 from .world.registry import WorldRegistry
 from .world.smart_object import Affordance, SmartObject
@@ -149,3 +151,28 @@ def load_scene_file(
 ) -> Simulation:
     data = yaml.safe_load(pathlib.Path(path).read_text())
     return load_scene(data, config, seed=seed, max_population=max_population)
+
+
+# --- scene file I/O (the authoring tool's read/write/list, Phase 4) --------
+def read_scene(name: str) -> dict:
+    """The raw scene dict for a project (for the editor to load)."""
+    return yaml.safe_load(scene_path(name).read_text())
+
+
+def write_scene(name: str, data: dict) -> None:
+    """Persist an edited scene back to `projects/<name>/scene.yaml`, keeping a
+    single `.bak` of the previous version."""
+    p = scene_path(name)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    if p.exists():
+        shutil.copyfile(p, p.with_suffix(".yaml.bak"))
+    p.write_text(yaml.safe_dump(data, sort_keys=False, default_flow_style=False))
+
+
+def list_scenes() -> list[str]:
+    """Dotted names of all projects that have a data scene, sorted."""
+    names = []
+    for sp in PROJECTS_DIR.rglob("scene.yaml"):
+        rel = sp.parent.relative_to(PROJECTS_DIR)
+        names.append(".".join(rel.parts))
+    return sorted(names)

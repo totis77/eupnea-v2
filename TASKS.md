@@ -187,6 +187,26 @@ controllers + recipes. This file is the DSL/AST the Phase 4 GUI will edit.
       authoring params from runtime state would be lossy, so save operates on the
       data, not the live Simulation.
 
+## Phase 4 — GUI authoring tool
+**Goal:** a browser editor that loads `scene.yaml`, edits entities/components
+visually, saves it back, and runs it — driving the same engine. Separate
+`editor.html`; Save overwrites `scene.yaml` (keeps one `.bak`).
+
+- [x] 4A **Load + render + save round-trip (keystone).** Server gained a scene
+      API on the existing HTTP bridge: `GET /scenes`, `GET /scene/<name>`,
+      `POST /scene/<name>` ([server.py](simsy/server.py)), backed by
+      `scene.read_scene/write_scene/list_scenes` ([scene.py](simsy/scene.py),
+      `.bak` on save). New [viewer/editor.html](viewer/editor.html) loads a scene,
+      renders it statically (objects/walls/staff/entrance), supports **drag-move,
+      add, and delete objects**, and Save persists to YAML. Verified end-to-end
+      (moved an object → saved ✓ → re-fetched the change). 48/48 green.
+- [ ] 4C **Property panel:** edit a selected entity's kind / affordances / slots /
+      tags and toggle queue·service·portal (inspector is read-only so far).
+- [ ] 4D **Walls + spawner/entrance** editing (draw/resize wall rects, move entrance).
+- [ ] 4E **Run from the editor:** a Run button builds a Simulation from the current
+      scene and streams it live, then back to edit.
+- [ ] 4F *(advanced)* archetypes/recipes editing.
+
 ## Status log
 - _(start)_ — plan created; beginning Task 1.
 - Task 1 done — `NavGrid(inflate=)`; doorway widened to y∈[4,8]; agents cross at

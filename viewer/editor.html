@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>simsy · scene editor</title>
+<style>
+  :root {
+    --bg:#0b0e13; --panel:#0f141b; --line:#222a35; --ink:#e6edf3; --muted:#8b949e;
+    --accent:#58a6ff; --ok:#3fb950; --sel:#d2a8ff; --wall:#222a35;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--ink);
+    font-family: ui-sans-serif, system-ui, sans-serif; }
+  #bar { display:flex; align-items:center; gap:10px; padding:8px 12px;
+    border-bottom:1px solid var(--line); background:var(--panel); }
+  #bar h1 { font-size:14px; margin:0 12px 0 0; font-weight:700; letter-spacing:.5px; }
+  #bar select, #bar button { background:#0e1116; color:var(--ink); border:1px solid var(--line);
+    border-radius:6px; padding:5px 10px; font-size:13px; cursor:pointer; }
+  #bar button:hover { border-color:var(--accent); }
+  #bar .spacer { flex:1; }
+  #status { color:var(--muted); font-size:12px; min-width:90px; }
+  #hint { color:var(--muted); font-size:12px; }
+  #stage { position:relative; height:calc(100% - 95px); }
+  canvas { width:100%; height:100%; display:block; cursor:default; }
+  #inspect { position:absolute; right:10px; top:10px; width:230px; background:var(--panel);
+    border:1px solid var(--line); border-radius:8px; padding:10px; font-size:12px; display:none; }
+  #inspect h3 { margin:0 0 6px; font-size:13px; }
+  #inspect .row { display:flex; justify-content:space-between; color:var(--muted); margin:2px 0; }
+  #inspect .row b { color:var(--ink); }
+</style>
+</head>
+<body>
+  <div id="bar">
+    <h1>simsy · scene editor</h1>
+    <label style="color:var(--muted);font-size:12px">scene</label>
+    <select id="project"></select>
+    <button id="add">+ object</button>
+    <button id="del">delete</button>
+    <div class="spacer"></div>
+    <span id="status"></span>
+    <button id="save">Save</button>
+  </div>
+  <div id="hint" style="padding:4px 12px">Drag an object to move it · click to select · Delete key removes it · Save writes scene.yaml (.bak kept)</div>
+  <div id="stage">
+    <canvas id="c"></canvas>
+    <div id="inspect"></div>
+  </div>
+<script>
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+let scene = null, project = null, selected = null, drag = null;
+
+function dpr(){ return devicePixelRatio || 1; }
+function resize(){ canvas.width = canvas.clientWidth*dpr(); canvas.height = canvas.clientHeight*dpr(); render(); }
+addEventListener("resize", resize);
+
+// ---- world <-> screen transform (fit scene bounds with a margin) ---------
+function view(){
+  const [minx,miny,maxx,maxy] = scene.world.bounds;
+  const m = 40*dpr();
+  const s = Math.min((canvas.width-2*m)/(maxx-minx), (canvas.height-2*m)/(maxy-miny));
+  return { minx,miny,maxx,maxy,m,s };
+}
+function wx(x){ const v=view(); return v.m + (x-v.minx)*v.s; }
+function wy(y){ const v=view(); return canvas.height - v.m - (y-v.miny)*v.s; }
+function ux(px){ const v=view(); return v.minx + (px-v.m)/v.s; }
+function uy(py){ const v=view(); return v.miny + (canvas.height - v.m - py)/v.s; }
+
+// ---- load / save ---------------------------------------------------------
+async function loadScenes(){
+  const { scenes } = await (await fetch("/scenes")).json();
+  const sel = document.getElementById("project");
+  sel.innerHTML = scenes.map(s => `<option>${s}</option>`).join("");
+  const wanted = new URLSearchParams(location.search).get("project");
+  if (wanted && scenes.includes(wanted)) sel.value = wanted;
+  await loadScene(sel.value);
+}
+async function loadScene(name){
+  project = name;
+  scene = await (await fetch(`/scene/${name}`)).json();
+  scene.objects = scene.objects || [];
+  selected = null; updateInspect(); status(`loaded ${name}`);
+  render();
+}
+async function save(){
+  status("saving…");
+  const res = await fetch(`/scene/${project}`, {
+    method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(scene),
+  });
+  status(res.ok ? "saved ✓" : "save failed");
+}
+function status(t){ document.getElementById("status").textContent = t; }
+
+// ---- rendering -----------------------------------------------------------
+function render(){
+  if (!scene) return;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  // walls
+  for (const w of (scene.walls||[])){
+    const [x0,y0,x1,y1]=w;
+    ctx.fillStyle="#222a35"; ctx.strokeStyle="#39424f"; ctx.lineWidth=1;
+    const sx=wx(x0), sy=wy(y1), sw=(x1-x0)*view().s, sh=(y1-y0)*view().s;
+    ctx.fillRect(sx,sy,sw,sh); ctx.strokeRect(sx,sy,sw,sh);
+  }
+  // entrance (spawner)
+  if (scene.spawner && scene.spawner.entrance){
+    const [ex,ey]=scene.spawner.entrance;
+    ctx.fillStyle="#1f6feb"; ctx.beginPath(); ctx.arc(wx(ex),wy(ey),6*dpr(),0,7); ctx.fill();
+    ctx.fillStyle="#8b949e"; ctx.font=`${11*dpr()}px ui-sans-serif`; ctx.textAlign="center";
+    ctx.fillText("entrance", wx(ex), wy(ey)+18*dpr());
+  }
+  // fixed agents (staff)
+  for (const a of (scene.agents||[])){
+    ctx.fillStyle="#d29922"; ctx.beginPath(); ctx.arc(wx(a.pos[0]),wy(a.pos[1]),6*dpr(),0,7); ctx.fill();
+    ctx.fillStyle="#8b949e"; ctx.font=`${10*dpr()}px ui-sans-serif`; ctx.textAlign="center";
+    ctx.fillText(a.id, wx(a.pos[0]), wy(a.pos[1])-9*dpr());
+  }
+  // objects
+  for (const o of scene.objects){
+    const cx=wx(o.pos[0]), cy=wy(o.pos[1]), w=92*dpr(), h=42*dpr();
+    ctx.beginPath(); ctx.roundRect(cx-w/2,cy-h/2,w,h,7*dpr());
+    ctx.fillStyle="#1b2230"; ctx.fill();
+    ctx.lineWidth = (o===selected?2.5:1.5); ctx.strokeStyle = (o===selected?getCss("--sel"):getCss("--line")); ctx.stroke();
+    ctx.fillStyle=getCss("--ink"); ctx.textAlign="center"; ctx.font=`${12*dpr()}px ui-sans-serif`;
+    ctx.fillText(o.kind||o.id, cx, cy-3*dpr());
+    ctx.fillStyle=getCss("--muted"); ctx.font=`${9*dpr()}px ui-sans-serif`;
+    const tags = (o.tags||[]).join(",");
+    ctx.fillText(`${o.id}${o.slots?` ·${o.slots}`:""}${tags?` ·${tags}`:""}`, cx, cy+9*dpr());
+  }
+}
+function getCss(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+
+// ---- selection / drag ----------------------------------------------------
+function hit(px,py){
+  for (let i=scene.objects.length-1;i>=0;i--){
+    const o=scene.objects[i], cx=wx(o.pos[0]), cy=wy(o.pos[1]), w=92*dpr(), h=42*dpr();
+    if (Math.abs(px-cx)<=w/2 && Math.abs(py-cy)<=h/2) return o;
+  }
+  return null;
+}
+canvas.addEventListener("mousedown", e=>{
+  const r=canvas.getBoundingClientRect(), px=(e.clientX-r.left)*dpr(), py=(e.clientY-r.top)*dpr();
+  selected = hit(px,py);
+  if (selected) drag = { dx: px-wx(selected.pos[0]), dy: py-wy(selected.pos[1]) };
+  updateInspect(); render();
+});
+canvas.addEventListener("mousemove", e=>{
+  if (!drag||!selected) return;
+  const r=canvas.getBoundingClientRect(), px=(e.clientX-r.left)*dpr(), py=(e.clientY-r.top)*dpr();
+  selected.pos = [ +(ux(px-drag.dx)).toFixed(2), +(uy(py-drag.dy)).toFixed(2) ];
+  updateInspect(); render();
+});
+addEventListener("mouseup", ()=>{ drag=null; });
+addEventListener("keydown", e=>{
+  if ((e.key==="Delete"||e.key==="Backspace") && selected){
+    scene.objects = scene.objects.filter(o=>o!==selected); selected=null; updateInspect(); render();
+  }
+});
+
+function updateInspect(){
+  const el=document.getElementById("inspect");
+  if (!selected){ el.style.display="none"; return; }
+  el.style.display="block";
+  const rows = [
+    ["id", selected.id], ["kind", selected.kind||"—"],
+    ["pos", selected.pos.join(", ")], ["slots", selected.slots??"—"],
+    ["tags", (selected.tags||[]).join(",")||"—"],
+    ["queue", selected.queue?"yes":"no"], ["service", selected.service?"yes":"no"],
+    ["portal", selected.portal?"yes":"no"],
+  ];
+  el.innerHTML = `<h3>${selected.id}</h3>` +
+    rows.map(([k,v])=>`<div class="row"><span>${k}</span><b>${v}</b></div>`).join("");
+}
+
+document.getElementById("project").addEventListener("change", e=>loadScene(e.target.value));
+document.getElementById("save").addEventListener("click", save);
+document.getElementById("del").addEventListener("click", ()=>{
+  if (selected){ scene.objects=scene.objects.filter(o=>o!==selected); selected=null; updateInspect(); render(); }
+});
+document.getElementById("add").addEventListener("click", ()=>{
+  const v=view(), cx=(v.minx+v.maxx)/2, cy=(v.miny+v.maxy)/2;
+  let n=1; while (scene.objects.some(o=>o.id===`object${n}`)) n++;
+  const o={ id:`object${n}`, kind:"Object", pos:[+cx.toFixed(2),+cy.toFixed(2)], slots:1 };
+  scene.objects.push(o); selected=o; updateInspect(); render();
+});
+
+loadScenes().then(resize);
+</script>
+</body>
+</html>

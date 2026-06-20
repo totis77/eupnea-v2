@@ -11,3 +11,4 @@ wheels/
 
 # Claude Code local (per-machine) settings; launch.json is shared
 .claude/settings.local.json
+*.yaml.bak

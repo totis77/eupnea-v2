@@ -24,9 +24,9 @@ simsy/                 # THE ENGINE — reusable AI mechanics; no scene content
   config.py            # typed config + load_config(); defaults live here
   sim.py               # Simulation driver (tick loop + snapshot emitter)
   project.py           # project loader: build_project(name) → Simulation (prefers scene.yaml, else build())
-  scene.py             # scene-as-data loader: YAML scene dict → Simulation (§6G); controller/recipe registries
+  scene.py             # scene-as-data: load YAML→Simulation (§6G) + read/write/list for the editor
   run.py               # generic headless runner: `python -m simsy.run [project] [ticks]`
-  server.py            # WebSocket + HTTP bridge for the viewer (`python -m simsy.server`)
+  server.py            # WebSocket + HTTP bridge; serves viewer/editor + scene API (GET/POST /scene/<name>)
   core/
     context.py         # SimContext: seeded RNG + fixed dt + tick  ← determinism choke point
     events.py          # queued EventBus (drained in insertion order)
@@ -51,7 +51,8 @@ simsy/                 # THE ENGINE — reusable AI mechanics; no scene content
     astar.py           # deterministic 8-dir A* + LOS path smoothing
     orca.py            # ORCA (RVO2 linear-program port): Vec2, Line, orca_velocity
     locomotion.py      # world-level movement: path following + ORCA + collision resolution
-viewer/index.html      # canvas client: interpolated render (toggle tethers/paths) + side panel: each agent's live plan tree (steps→active leaf) + carried items + stress
+viewer/index.html      # live canvas client: interpolated render (toggle tethers/paths) + side panel: each agent's plan tree + carried items + stress
+viewer/editor.html     # scene authoring tool (Phase 4): load/edit/save scene.yaml via the scene API; drag/add/delete objects
 projects/              # PROJECTS — self-contained scenarios; own their assets+scene, reference simsy
   coffee_shop/
     scene.yaml         # DATA scene (§6G): walls, objects (espresso queue/couch/exit), guest archetype, spawner
@@ -132,6 +133,7 @@ as `simsy-viewer`.
 | [test_group.py](tests/test_group.py) | group cohesion keeps members tighter than no cohesion; deterministic |
 | [test_venue.py](tests/test_venue.py) | Portal links target; guests cross a gapless wall via the portal and get served |
 | [test_mood.py](tests/test_mood.py) | Mood clamps; queue waiting builds stress; deterministic |
+| [test_scene_io.py](tests/test_scene_io.py) | scene list/write(+backup)/read round-trip; written scene loads |
 
 ## Entity-component model (§6)
 
