@@ -37,6 +37,8 @@ WS_PORT = _cfg.server.ws_port
 VIEWER_DIR = Path(__file__).resolve().parent.parent / "viewer"
 
 _clients: set = set()
+_sim = None          # the simulation currently being streamed
+_pending_sim = None  # a scene posted from the editor, swapped in by the loop
 
 
 async def _ws_handler(ws) -> None:
@@ -48,18 +50,22 @@ async def _ws_handler(ws) -> None:
 
 
 async def _sim_loop() -> None:
-    sim = build_project(PROJECT, config=_cfg)
-    dt = sim.ctx.dt
+    global _sim, _pending_sim
+    _sim = build_project(PROJECT, config=_cfg)
+    dt = _cfg.simulation.dt
     # Decouple broadcast rate from the tick rate (architecture doc 2A): emit a
     # snapshot every Nth tick so a 100Hz sim can still stream at, say, 10Hz.
     every = max(1, round(_cfg.simulation.tick_rate_hz / _cfg.server.snapshot_hz))
     loop = asyncio.get_running_loop()
     next_tick = loop.time()
-    print(f"[sim] {1 / dt:.0f} ticks/s, broadcast every {every} tick(s) (seed {sim.ctx.seed})")
+    print(f"[sim] {1 / dt:.0f} ticks/s, broadcast every {every} tick(s)")
     while True:
-        sim.step()
-        if _clients and sim.ctx.tick % every == 0:
-            websockets.broadcast(_clients, json.dumps(sim.snapshot()))
+        if _pending_sim is not None:  # editor pressed Run: stream the posted scene
+            _sim, _pending_sim = _pending_sim, None
+            print("[run] switched to a scene posted from the editor")
+        _sim.step()
+        if _clients and _sim.ctx.tick % every == 0:
+            websockets.broadcast(_clients, json.dumps(_sim.snapshot()))
         next_tick += dt
         await asyncio.sleep(max(0.0, next_tick - loop.time()))
 
@@ -93,14 +99,21 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         from . import scene
+        length = int(self.headers.get("Content-Length", 0))
+        raw = self.rfile.read(length) if length else b"{}"
         if self.path.startswith("/scene/"):
             name = self.path[len("/scene/"):]
-            length = int(self.headers.get("Content-Length", 0))
             try:
-                data = json.loads(self.rfile.read(length))
-                scene.write_scene(name, data)
+                scene.write_scene(name, json.loads(raw))
                 return self._json(200, {"ok": True, "name": name})
             except Exception as e:  # noqa: BLE001 - report any save failure to the editor
+                return self._json(400, {"error": str(e)})
+        if self.path == "/run":  # build the posted scene and stream it live
+            global _pending_sim
+            try:
+                _pending_sim = scene.load_scene(json.loads(raw), config=_cfg)
+                return self._json(200, {"ok": True})
+            except Exception as e:  # noqa: BLE001 - surface a bad scene to the editor
                 return self._json(400, {"error": str(e)})
         self.send_error(404)
 

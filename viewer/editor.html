@@ -23,11 +23,16 @@
   #hint { color:var(--muted); font-size:12px; }
   #stage { position:relative; height:calc(100% - 95px); }
   canvas { width:100%; height:100%; display:block; cursor:default; }
-  #inspect { position:absolute; right:10px; top:10px; width:230px; background:var(--panel);
+  #inspect { position:absolute; right:10px; top:10px; width:250px; background:var(--panel);
     border:1px solid var(--line); border-radius:8px; padding:10px; font-size:12px; display:none; }
-  #inspect h3 { margin:0 0 6px; font-size:13px; }
-  #inspect .row { display:flex; justify-content:space-between; color:var(--muted); margin:2px 0; }
-  #inspect .row b { color:var(--ink); }
+  #inspect h3 { margin:0 0 8px; font-size:13px; }
+  #inspect label { display:flex; justify-content:space-between; align-items:center; gap:6px; margin:5px 0; color:var(--muted); }
+  #inspect label.chk { justify-content:flex-start; }
+  #inspect span { display:flex; gap:4px; }
+  #inspect input { background:#0e1116; color:var(--ink); border:1px solid var(--line);
+    border-radius:4px; padding:3px 5px; font-size:11px; width:130px; }
+  #inspect input[type=number] { width:54px; }
+  #inspect input[type=checkbox] { width:auto; }
 </style>
 </head>
 <body>
@@ -39,6 +44,7 @@
     <button id="del">delete</button>
     <div class="spacer"></div>
     <span id="status"></span>
+    <button id="run">▶ Run</button>
     <button id="save">Save</button>
   </div>
   <div id="hint" style="padding:4px 12px">Drag an object to move it · click to select · Delete key removes it · Save writes scene.yaml (.bak kept)</div>
@@ -162,19 +168,59 @@ function updateInspect(){
   const el=document.getElementById("inspect");
   if (!selected){ el.style.display="none"; return; }
   el.style.display="block";
-  const rows = [
-    ["id", selected.id], ["kind", selected.kind||"—"],
-    ["pos", selected.pos.join(", ")], ["slots", selected.slots??"—"],
-    ["tags", (selected.tags||[]).join(",")||"—"],
-    ["queue", selected.queue?"yes":"no"], ["service", selected.service?"yes":"no"],
-    ["portal", selected.portal?"yes":"no"],
-  ];
-  el.innerHTML = `<h3>${selected.id}</h3>` +
-    rows.map(([k,v])=>`<div class="row"><span>${k}</span><b>${v}</b></div>`).join("");
+  const o=selected;
+  const aff = Object.entries(o.affordances||{}).map(([k,v])=>`${k}:${v}`).join(", ");
+  el.innerHTML = `
+    <h3>object</h3>
+    <label>id <input id="f-id" value="${o.id}"></label>
+    <label>kind <input id="f-kind" value="${o.kind||''}"></label>
+    <label>pos <span><input id="f-px" type="number" step="0.5" value="${o.pos[0]}"><input id="f-py" type="number" step="0.5" value="${o.pos[1]}"></span></label>
+    <label>slots <input id="f-slots" type="number" min="1" value="${o.slots??1}"></label>
+    <label>tags <input id="f-tags" value="${(o.tags||[]).join(', ')}" placeholder="seat, sells:coffee"></label>
+    <label>afford. <input id="f-aff" value="${aff}" placeholder="Caffeine:40"></label>
+    <label class="chk"><input type="checkbox" id="f-queue" ${o.queue?'checked':''}> queue</label>
+    <label class="chk"><input type="checkbox" id="f-service" ${o.service?'checked':''}> service</label>
+    <label class="chk"><input type="checkbox" id="f-despawn" ${o.despawns?'checked':''}> despawns (exit)</label>
+    <label class="chk"><input type="checkbox" id="f-portal" ${o.portal?'checked':''}> portal</label>
+    <label id="f-portal-row" style="${o.portal?'':'display:none'}">target <span><input id="f-tx" type="number" step="0.5" value="${o.portal?o.portal.target[0]:0}"><input id="f-ty" type="number" step="0.5" value="${o.portal?o.portal.target[1]:0}"></span></label>
+  `;
+  el.querySelectorAll("input").forEach(inp => inp.addEventListener("input", applyInspect));
+}
+
+// Read the form back into the selected object (no DOM rebuild, to keep focus).
+function applyInspect(){
+  const o=selected; if (!o) return;
+  const g=id=>document.getElementById(id);
+  o.id = g("f-id").value || o.id;
+  o.kind = g("f-kind").value;
+  o.pos = [ +g("f-px").value, +g("f-py").value ];
+  o.slots = Math.max(1, +g("f-slots").value || 1);
+  const tags = g("f-tags").value.split(",").map(s=>s.trim()).filter(Boolean);
+  tags.length ? o.tags=tags : delete o.tags;
+  const aff={}; g("f-aff").value.split(",").map(s=>s.trim()).filter(Boolean)
+    .forEach(p=>{ const [k,v]=p.split(":"); if (k) aff[k.trim()] = +(v||0); });
+  Object.keys(aff).length ? o.affordances=aff : delete o.affordances;
+  g("f-queue").checked ? (o.queue = o.queue||{direction:[-1,0],spacing:1.5,gap:2.0}) : delete o.queue;
+  g("f-service").checked ? (o.service = o.service||{pickup_offset:[0,-3]}) : delete o.service;
+  g("f-despawn").checked ? (o.despawns=true) : delete o.despawns;
+  g("f-portal").checked ? (o.portal = o.portal||{target:[0,0]}) : delete o.portal;
+  g("f-portal-row").style.display = g("f-portal").checked ? "" : "none";
+  if (o.portal) o.portal.target = [ +g("f-tx").value, +g("f-ty").value ];
+  render();
+}
+
+async function run(){
+  status("starting…");
+  const res = await fetch("/run", {
+    method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(scene),
+  });
+  if (res.ok) location.href = "/index.html";
+  else { const e = await res.json().catch(()=>({})); status("run failed: " + (e.error||"")); }
 }
 
 document.getElementById("project").addEventListener("change", e=>loadScene(e.target.value));
 document.getElementById("save").addEventListener("click", save);
+document.getElementById("run").addEventListener("click", run);
 document.getElementById("del").addEventListener("click", ()=>{
   if (selected){ scene.objects=scene.objects.filter(o=>o!==selected); selected=null; updateInspect(); render(); }
 });
